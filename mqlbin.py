@@ -29,7 +29,7 @@ flags.DEFINE_string(
     "contains valid mql env key/val pairs")
 
 flags.DEFINE_string("mqlcmd", None, "'read' or 'write'")
-flags.DEFINE_string("graphd_addr", "localhost:9100",
+flags.DEFINE_string("graphd_addr", "localhost:8100",
                     "host:port of graphd server")
 
 
@@ -37,7 +37,8 @@ def main(argv):
   if not FLAGS.graphd_addr:
     raise Exception("Must specify a --graphd_addr")
 
-  conn = TcpGraphConnector(addrs=[("localhost", 8100)])
+  host, port = FLAGS.graphd_addr.rsplit(":", 1)
+  conn = TcpGraphConnector(addrs=[(host, int(port))])
   mql = MQLService(connector=conn)
 
   q = json.loads(argv[1], object_pairs_hook=OrderedDict)

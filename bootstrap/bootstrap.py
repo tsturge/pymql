@@ -13,12 +13,13 @@ from pymql import MQLService
 
 from pymql.mql import graph
 from pymql.mql import lojson
+from pymql.mql import scope
 
 FLAGS = flags.FLAGS
 flags.DEFINE_string(
     'mqlenv', None, 'a dict in the form of a string which '
     'contains valid mql env key/val pairs')
-flags.DEFINE_string('graphd_addr', 'localhost:9100',
+flags.DEFINE_string('graphd_addr', 'localhost:8100',
                     'host:port of graphd server')
 flags.DEFINE_string('load', '', 'load bootstrap from given file')
 
@@ -107,17 +108,42 @@ class Bootstrap(object):
 
     self.xlate_link[link['guid']] = new_link
 
+  # Schema that MQL's id lookup requires but the bootstrap files lack.
+  # Keys in / need root permission, which no group holds, so these
+  # writes are privileged.
+  OBJECT_HINTS = [
+      {'create': 'unless_exists', 'guid': None, 'type': '/type/domain',
+       'key': {'namespace': '/', 'value': 'freebase'}},
+      {'create': 'unless_exists', 'guid': None, 'type': '/type/type',
+       'key': {'namespace': '/freebase', 'value': 'object_hints'},
+       '/type/type/domain': {'id': '/freebase'}},
+      {'create': 'unless_exists', 'guid': None, 'type': '/type/property',
+       'key': {'namespace': '/freebase/object_hints', 'value': 'best_hrid'},
+       '/type/property/schema': {'id': '/freebase/object_hints'},
+       '/type/property/expected_type': {'id': '/type/text'},
+       '/type/property/unique': True},
+      {'create': 'unless_exists', 'guid': None, 'type': '/type/namespace',
+       'key': {'namespace': '/', 'value': 'en'}},
+  ]
+
+  def load_object_hints(self):
+    mql = MQLService(connector=self.gc)
+    for q in self.OBJECT_HINTS:
+      mql.write(q, user='/user/root', privileged=scope.Privileged)
+
 
 def main(argv):
   if not FLAGS.graphd_addr:
     raise Exception('Must specify a --graphd_addr')
 
-  conn = graph.TcpGraphConnector(addrs=[('localhost', 8100)])
+  host, port = FLAGS.graphd_addr.rsplit(':', 1)
+  conn = graph.TcpGraphConnector(addrs=[(host, int(port))])
 
   bootstrap = Bootstrap(conn)
   bootstrap.load_from_file(FLAGS.load)
   bootstrap.load_bootstrap()
   bootstrap.load_root_user()
+  bootstrap.load_object_hints()
 
 
 if __name__ == '__main__':
