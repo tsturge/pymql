@@ -153,8 +153,8 @@ class MQLError(MQLParameterizedError):
     if isinstance(clause, list):
       clause = clause[0]
 
-    # if it's not a dict we're not going to make much progress...
-    if not isinstance(clause, dict):
+    # if it's not a query clause we're not going to make much progress...
+    if not isinstance(clause, dict) or not hasattr(clause, 'parent_clause'):
       return clause
 
     # are we a lojson query for a highjson query?
@@ -186,8 +186,8 @@ class MQLError(MQLParameterizedError):
     if isinstance(clause, list):
       clause = clause[0]
 
-    # if it's not a dict we're not going to make much progress...
-    if not isinstance(clause, dict):
+    # if it's not a query clause we're not going to make much progress...
+    if not isinstance(clause, dict) or not hasattr(clause, 'parent_clause'):
       return (clause, None, None)
 
     # are we a lojson query for a highjson query?
