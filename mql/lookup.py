@@ -39,6 +39,13 @@ class NamespaceFactory:
     self.best_hrid_guid = None
     self.forbidden_namespaces = ()
 
+  def _best_hrid_clause(self):
+    return [{
+        ":typeguid": self.best_hrid_guid,
+        ":value": None,
+        ":optional": True,
+    }]
+
   def flush(self):
     """
         Completely empty the caches.
@@ -55,11 +62,16 @@ class NamespaceFactory:
       # it may be set to False after this...
       self.topic_en = self.lookup_guid("/en", varenv)
 
-    if not self.best_hrid_guid:
+    # best_hrid_guid is None until looked up, and False if the graph
+    # doesn't have the property; then ids come from namespace keys alone.
+    if self.best_hrid_guid is None:
       g = self.lookup_guid("/freebase/object_hints/best_hrid", varenv)
-      if not isinstance(g, basestring) or g[0] != "#":
-        raise MQLInternalError({}, "No /freebase/object_hints/best_hrid")
-      self.best_hrid_guid = g
+      if isinstance(g, basestring) and g[0] == "#":
+        self.best_hrid_guid = g
+      else:
+        LOG.warning("mql.lookup.preload",
+                    "No /freebase/object_hints/best_hrid; ids will not use it")
+        self.best_hrid_guid = False
 
     if not self.forbidden_namespaces:
       self.forbidden_namespaces = \
@@ -319,11 +331,6 @@ class NamespaceFactory:
     query = [{
         "@guid": ask_list,
         "@pagesize": len(ask_list) + 1,
-        "best_hrid": [{
-            ":typeguid": self.best_hrid_guid,
-            ":value": None,
-            ":optional": True,
-        }],
         "-has_key": [{
             ":value":
                 None,
@@ -357,6 +364,8 @@ class NamespaceFactory:
             ":optional": True
         }
     }]
+    if self.best_hrid_guid:
+      query[0]["best_hrid"] = self._best_hrid_clause()
 
     varenv["gr_log_code"] = "guid2id"
     query_results = self.querier.read(query, varenv)
@@ -394,7 +403,7 @@ class NamespaceFactory:
         - among names of the same length, pick any one at random.
         """
 
-    hrids = head["best_hrid"]
+    hrids = head.get("best_hrid")
     if hrids:
       if len(hrids) > 1:
         # This should never happen.
@@ -493,11 +502,6 @@ class NamespaceFactory:
     query = {
         "@guid":
             guid,
-        "best_hrid": [{
-            ":typeguid": self.best_hrid_guid,
-            ":value": None,
-            ":optional": True,
-        }],
         "has_root_name": [{
             ":type": "has_key",
             ":comparator": "octet",
@@ -542,6 +546,8 @@ class NamespaceFactory:
             }]
         }],
     }
+    if self.best_hrid_guid:
+      query["best_hrid"] = self._best_hrid_clause()
 
     try:
       varenv["gr_log_code"] = "guid2id"
@@ -559,7 +565,7 @@ class NamespaceFactory:
 
     idname = None
 
-    hrids = result["best_hrid"]
+    hrids = result.get("best_hrid")
     if hrids:
       if len(hrids) > 1:
         # This should never happen.
