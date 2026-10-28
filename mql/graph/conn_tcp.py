@@ -220,38 +220,38 @@ class TcpGraphConnector(GraphConnector):
         if retry_interval:
           time.sleep(retry_interval)
 
-          if not self.tcp_conn:
-            self.tcp_conn = TcpConnection(policy['connect'], self.addr)
+        if not self.tcp_conn:
+          self.tcp_conn = TcpConnection(self.addr, policy['connect'])
 
-          self.qretries += 1
+        self.qretries += 1
 
-          # Keep close to the connection.send
-          LOG.notice('graph.request.start', '', policy=policy, addr=self.addr)
+        # Keep close to the connection.send
+        LOG.notice('graph.request.start', '', policy=policy, addr=self.addr)
 
-          start_time = time.time()
+        start_time = time.time()
 
-          timeout = self._make_timeout(policy['timeout'], deadline)
+        timeout = self._make_timeout(policy['timeout'], deadline)
 
-          self.tcp_conn.send_socket(msg + '\n', timeout)
+        self.tcp_conn.send_socket(msg + '\n', timeout)
 
-          timeout = self._make_timeout(policy['timeout'], deadline)
+        timeout = self._make_timeout(policy['timeout'], deadline)
 
-          result = self.tcp_conn.wait_response(timeout)
+        result = self.tcp_conn.wait_response(timeout)
 
-          token_time = time.time()
+        token_time = time.time()
 
-          if result.cost is not None:
-            request_cost = coststr_to_dict(result.cost)
-            #request_cost['tg'] = (time.time() - start_time)
-            request_cost['tg'] = (result.end_time - start_time)
-            request_cost['tf'] = (token_time - start_time)
+        if result.cost is not None:
+          request_cost = coststr_to_dict(result.cost)
+          #request_cost['tg'] = (time.time() - start_time)
+          request_cost['tg'] = (result.end_time - start_time)
+          request_cost['tf'] = (token_time - start_time)
 
-            # on success, the cost will be in req
-            costs.append(request_cost)
+          # on success, the cost will be in req
+          costs.append(request_cost)
 
-          LOG.notice('graph.request.end', '')
+        LOG.notice('graph.request.end', '')
 
-          break
+        break
 
       except GraphIsSnapshottingError, e:
         # The connection is OK, but we need to break it
@@ -266,6 +266,8 @@ class TcpGraphConnector(GraphConnector):
         # only trap MQLConnectionError, not MQLTimeoutError.
         # most of the time a timeout error say "this query is too hard"
         # don't shop it around and force everyone else to timeout too.
+        # The socket has already been closed; reconnect on the next try.
+        self.tcp_conn = None
         self._record_failure(self.addr)
         cost = coststr_to_dict(e.cost)
         costs.append(cost)
