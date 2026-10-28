@@ -28,7 +28,7 @@ import json
 from . import scope
 from . import lookup
 import pprint
-import cgi
+import html
 
 from .qprim import QueryPrimitive
 from .utils import (element, elements, dict_recurse, valid_relname, follow_path,
@@ -670,7 +670,7 @@ class LowQuery(object):
         if value.find('javascript:') == 0:
           value = 'unsafe-' + value
       else:
-        value = cgi.escape(value)
+        value = html.escape(value, quote=False)
 
     return value
 
@@ -1564,8 +1564,7 @@ def cmdline_main():
   if options.raw:
     query = eval(query)
   else:
-    # XXX should eventually use unicode, for now utf8
-    query = json.loads(query, encoding='utf-8', result_encoding='utf-8')
+    query = json.loads(query)
 
   if hasattr(op, 'gc'):
     lowq = LowQuery(op.gc)

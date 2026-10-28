@@ -15,7 +15,7 @@
 import re
 from xml.sax import saxutils
 import urllib.request, urllib.parse, urllib.error
-import cgi
+import html
 
 from pymql.error import FormattingError
 
@@ -106,7 +106,7 @@ def escapeMarkup(data):
     Convert the characters "&", "<" and ">" in data to HTML-safe
     sequences.
     """
-  return (cgi.escape(data))
+  return (html.escape(data, quote=False))
 
 
 ######################################################################

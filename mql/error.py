@@ -115,7 +115,7 @@ class MQLError(MQLParameterizedError):
 
   def get_error_id(self):
     # this is the centralized place for error naming
-    return '/api/status/error/mql/%s' % string.lower(self.error_type)
+    return '/api/status/error/mql/%s' % self.error_type.lower()
 
   def get_error(self):
     # I have wrapped this because I may want to compute the values dynamically

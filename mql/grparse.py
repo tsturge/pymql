@@ -147,18 +147,24 @@ class ReplyParser:
     # use (faster than string concat)
 
   def parsestr(self, s):
-    if '\n' in s:
+    """Parse s, a chunk of graphd output, as bytes from the socket or str.
+
+    Bytes are kept until a whole line is in, so that a multi-byte
+    character split across reads decodes correctly.
+    """
+    newline = b'\n' if isinstance(s, bytes) else '\n'
+    if newline in s:
       # parse all of the 'completed' lines, and if there is an
       # uncompleted line at the end of s, leave it in curreply
 
-      reply_list = s.split('\n')
+      reply_list = s.split(newline)
 
       self.curreply.append(reply_list.pop(0))
 
       for reply in reply_list:
 
         # parse the previous reply
-        replystr = ''.join(self.curreply)
+        replystr = newline[:0].join(self.curreply)
         self.parse_full_reply(replystr)
         self.reset_parser()
 
@@ -176,6 +182,8 @@ class ReplyParser:
         nested lists of tokens. Results are in the form:
         [ 'ok', 'id=', '"me;..."', [[['010000..', '01...', ...]]]]
         """
+    if isinstance(replystr, bytes):
+      replystr = replystr.decode('utf-8', 'surrogateescape')
     LOG.debug('graph.result', replystr)
     token_list = graphresult_re.findall(replystr)
 

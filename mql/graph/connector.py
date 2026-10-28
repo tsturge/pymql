@@ -448,7 +448,7 @@ class GraphConnector(object):
     for k, v in request_cost.items():
       if k in ['mm', 'fm']:
         # These are high water marks. Don't sum them.
-        self.totalcost[k] = max(v, self.totalcost.get(k))
+        self.totalcost[k] = max(v, self.totalcost.get(k, v))
       else:
         if k in self.totalcost:
           self.totalcost[k] += v

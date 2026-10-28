@@ -126,7 +126,7 @@ class MQLTest(mql_fixture.MQLTest):
     """
     self.DoQueryException(
         query,
-        "MQLParseError'> != <type 'exceptions.KeyError'>",
+        "MQLParseError'> != <class 'KeyError'>",
         exc_response=(KeyError, 'whatev')
     )
 

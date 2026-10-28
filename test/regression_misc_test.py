@@ -45,8 +45,7 @@ class MQLTest(mql_fixture.MQLTest):
       }
     ]
     """
-    self.DoQuery(query.encode('utf-8'),
-                 exp_response=exp_response.encode('utf-8'))
+    self.DoQuery(query, exp_response=exp_response)
 
   def testCursor(self):
     """JIRA API-62 bug."""

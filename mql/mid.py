@@ -143,7 +143,7 @@ def to_guid(mid):
   graphid = graphid << 64
   objid = GUID_BASE | int_of_munchstr(mid, 4, len_mid - 4)
   guid = graphid | objid
-  return hex(guid)[2:-1]  # chop off 0x and L
+  return '%x' % guid
 
 
 if __name__ == "__main__":

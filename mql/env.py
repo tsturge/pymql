@@ -13,7 +13,7 @@
 # limitations under the License.
 
 from .grquoting import quote, unquote
-import cgi
+import html
 from .utils import Missing, valid_mid, valid_mql_key
 
 
@@ -48,11 +48,7 @@ class Varenv(dict):
 
     for key in keys:
       if key in underlying_dict:
-        val = underlying_dict[key]
-        if isinstance(val, str):
-          val = val.encode('utf-8')
-
-        self[key] = val
+        self[key] = underlying_dict[key]
 
     self.parent = underlying_dict
 
@@ -568,4 +564,4 @@ def unquote_value(datatype, value, safe):
     else:
       # this has no effect on timestamps and guids but I feel this is
       # better code than deliberately excluding them.
-      return cgi.escape(value)
+      return html.escape(value, quote=False)

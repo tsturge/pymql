@@ -391,7 +391,7 @@ class TcpConnection(object):
 
     try:
       self.pending = s
-      self.socket.sendall(s)
+      self.socket.sendall(s.encode('utf-8', 'surrogateescape'))
 
     except socket.timeout as e:
       self.disconnect()

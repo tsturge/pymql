@@ -376,14 +376,9 @@ class HighQuery(object):
 
       for key in query:
         if not isinstance(key, str):
-          if isinstance(key, str):
-            try:
-              key = key.encode('ascii')
-            except UnicodeEncodeError:
-              raise MQLParseError(
-                  None, 'Keys must be ASCII strings', key=key.encode('utf-8'))
-          else:
-            raise MQLParseError(None, 'Keys must be strings', key=str(key))
+          raise MQLParseError(None, 'Keys must be strings', key=str(key))
+        if not key.isascii():
+          raise MQLParseError(None, 'Keys must be ASCII strings', key=key)
 
         if key in self.directives:
           # do we want to deep-copy lists of directives?
@@ -422,10 +417,13 @@ class HighQuery(object):
       raise MQLParseError(
           None, 'Queries must start with a dictionary or list of dictionaries')
 
+    elif isinstance(query, int) and not -2**63 <= query < 2**63:
+      raise MQLParseError(
+          None, "Integer value out of range '%(value)s'", value=str(query))
     elif isinstance(query, (float, int, bool)):
       rv = QueryDict(original_query=query, terminal='V', value=query)
     elif isinstance(query, str):
-      if len(query) > 4096:
+      if len(query.encode('utf-8')) > 4096:
         raise MQLParseError(
             None, 'String greater than 4096 bytes in length', value=query)
 
@@ -433,17 +431,6 @@ class HighQuery(object):
 
     elif query is None:
       rv = QueryDict(original_query=query, terminal='N', value=None)
-    elif isinstance(query, str):
-      # support unicode and silently transcode into utf-8
-      newstr = query.encode('utf-8')
-      if len(newstr) > 4096:
-        raise MQLParseError(
-            None, 'String greater than 4096 bytes in length', value=query)
-
-      rv = QueryDict(original_query=query, terminal='V', value=newstr)
-    elif isinstance(query, int):
-      raise MQLParseError(
-          None, "Integer value out of range '%(value)s'", value=str(query))
     else:
       raise MQLParseError(
           None,
@@ -455,18 +442,17 @@ class HighQuery(object):
   def validate_directive(self, key, value):
 
     # currently just normalizes unicode strings if necessary -- performs no actual parameter checks.
-    if isinstance(value, (str, float, int, bool)) or value is None:
-      # null isn't really valid, but we'd rather solve that problem at the individual directive level for now.
-      return value
-    elif isinstance(value, str):
-      try:
-        return value.encode('ascii')
-      except UnicodeEncodeError:
+    if isinstance(value, str):
+      if not value.isascii():
         raise MQLParseError(
             None,
             "'%(key)s' directive values must be ASCII strings",
             key=key,
-            value=value.encode('utf-8'))
+            value=value)
+      return value
+    elif isinstance(value, (float, int, bool)) or value is None:
+      # null isn't really valid, but we'd rather solve that problem at the individual directive level for now.
+      return value
     elif isinstance(value, list):
       rv = QueryList()
       for val in value:

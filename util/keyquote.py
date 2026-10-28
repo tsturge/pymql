@@ -23,8 +23,8 @@ def quotekey(ustr):
     valid_always = string.ascii_letters + string.digits + '_'
     valid_interior_only = valid_always + '-'
 
-    if isinstance(ustr, str):
-        s = str(ustr,'utf-8')
+    if isinstance(ustr, bytes):
+        s = ustr.decode('utf-8')
     elif isinstance(ustr, str):
         s = ustr
     else:
@@ -37,21 +37,31 @@ def quotekey(ustr):
     if s[0] in valid_always:
         output.append(s[0])
     else:
-        output.append('$%04X' % ord(s[0]))
+        output.append(_escape(s[0]))
 
     for c in s[1:-1]:
         if c in valid_interior_only:
             output.append(c)
         else:
-            output.append('$%04X' % ord(c))
+            output.append(_escape(c))
 
     if len(s) > 1:
         if s[-1] in valid_always:
             output.append(s[-1])
         else:
-            output.append('$%04X' % ord(s[-1]))
+            output.append(_escape(s[-1]))
 
     return str(''.join(output))
+
+
+def _escape(c):
+    # Characters beyond the BMP are escaped as a UTF-16 surrogate pair,
+    # as Python 2's narrow unicode strings did.
+    n = ord(c)
+    if n > 0xFFFF:
+        n -= 0x10000
+        return '$%04X$%04X' % (0xD800 + (n >> 10), 0xDC00 + (n & 0x3FF))
+    return '$%04X' % n
 
 
 def unquotekey(key, encoding=None):
@@ -82,7 +92,8 @@ def unquotekey(key, encoding=None):
             )
             raise error.MQLInternalError(None, msg)
 
-    ustr = ''.join(output)
+    # recombine surrogate pairs from _escape
+    ustr = ''.join(output).encode('utf-16', 'surrogatepass').decode('utf-16')
 
     if encoding is None:
         return ustr

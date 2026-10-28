@@ -106,9 +106,6 @@ class NamespaceFactory:
     # we generate the actual graph query itself.
     retval = {}
     for name in id_list:
-      if isinstance(name, str):
-        name = name.encode("utf-8")
-
       if not isinstance(name, str):
         raise MQLParseError(
             None, "didn't understand '%(id)s' as an id", id=str(name))
@@ -278,9 +275,6 @@ class NamespaceFactory:
   def lookup_id(self, guid, varenv):
     # this function needs to have exactly the same semantics as
     # lookup_ids() (which now contains the "official" semantics)
-    if isinstance(guid, str):
-      guid = guid.encode("utf-8")
-
     return self.lookup_ids([guid], varenv)[guid]
 
   def lookup_ids(self, guid_list, varenv):
@@ -297,9 +291,6 @@ class NamespaceFactory:
     if not "asof" in varenv:
       # Step 1: maybe we already know.
       for guid in guid_list:
-        if isinstance(guid, str):
-          guid = guid.encode("utf-8")
-
         if guid in self.guids:
           LOG.debug(
               "mql.lookup.id.cached",
@@ -313,9 +304,6 @@ class NamespaceFactory:
 
     else:
       for guid in guid_list:
-        if isinstance(guid, str):
-          guid = guid.encode("utf-8")
-
         ask_list.add(guid)
 
       cache = False

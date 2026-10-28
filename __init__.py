@@ -291,8 +291,13 @@ def sort_query_keys(part):
   elif isinstance(part, dict):
     new_d = collections.OrderedDict()
 
-    for k in sorted(part.keys()):
+    for k in sorted(part.keys(), key=query_key_order):
       new_d[k] = sort_query_keys(part[k])
     return new_d
   else:
     return part
+
+
+def query_key_order(key):
+  """Sort key for query keys: numbers first, as Python 2 sorted them."""
+  return (not isinstance(key, (int, float)), key)
