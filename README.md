@@ -74,9 +74,21 @@ MQLResult(result={'create': 'created', 'id': '/en/example', 'name': 'Example', '
 
 ## Running the tests
 
-The tests in `test/` replay graphd responses recorded from the Freebase graph
-in `test/data/*.yaml`, so they don't need a graphd. Run each test file in its
-own process, since a process loads only one recording:
+There are three kinds of test in `test/`:
+
+- Unit tests of single modules, with no graphd: `grparse_test.py` (the graphd
+  reply parser), `grquoting_test.py`, `keyquote_test.py`, `mid_codec_test.py`
+  and `utils_test.py`.
+- `live_graphd_test.py`, which starts its own graphd on a free port in a
+  temporary directory, bootstraps it, and runs MQL reads and writes against it.
+  It looks for the graphd binary in `--graphd_binary`, then `$GRAPHD`, then
+  `../graphd/out/bin/graphd` next to this repository (the Make build), and is
+  skipped if there is none.
+- The rest replay graphd responses recorded from the Freebase graph in
+  `test/data/*.yaml`, so they don't need a graphd.
+
+Run each test file in its own process, since a process loads only one
+recording:
 
 ```
 $ for t in pymql/test/*_test.py; do venv/bin/python $t; done
