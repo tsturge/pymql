@@ -195,16 +195,17 @@ def encode_cursor(cursor):
     cursors should always be ascii. Also, we need to sign cursors
     """
   if isinstance(cursor, str):
-    return urlsafe_b64encode(zlib.compress(cursor, 9))
+    return urlsafe_b64encode(zlib.compress(cursor.encode("utf-8"),
+                                           9)).decode("ascii")
   return cursor
 
 
 def decode_cursor(encoded_cursor):
   if isinstance(encoded_cursor, str):
     try:
-      return zlib.decompress(urlsafe_b64decode(str(encoded_cursor)))
-    except TypeError as e:
-      # not base64
+      return zlib.decompress(urlsafe_b64decode(encoded_cursor)).decode("utf-8")
+    except (TypeError, ValueError) as e:
+      # not base64 (binascii.Error is a ValueError), or not UTF-8
       raise MQLParseError(None, "Invalid cursor", cursor=encoded_cursor)
     except zlib.error:
       # base64, not zlib compressed.
