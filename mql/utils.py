@@ -20,7 +20,7 @@ from absl import logging as glogging
 from pymql.log import LOG, log_util
 #from pymql import json
 import json
-from error import MQLInternalParseError, MQLParseError
+from .error import MQLInternalParseError, MQLParseError
 from base64 import urlsafe_b64encode, urlsafe_b64decode
 from difflib import unified_diff
 import zlib
@@ -194,16 +194,16 @@ def encode_cursor(cursor):
     dumbed down for now.. eventually we'd like to be smarter since
     cursors should always be ascii. Also, we need to sign cursors
     """
-  if isinstance(cursor, basestring):
+  if isinstance(cursor, str):
     return urlsafe_b64encode(zlib.compress(cursor, 9))
   return cursor
 
 
 def decode_cursor(encoded_cursor):
-  if isinstance(encoded_cursor, basestring):
+  if isinstance(encoded_cursor, str):
     try:
       return zlib.decompress(urlsafe_b64decode(str(encoded_cursor)))
-    except TypeError, e:
+    except TypeError as e:
       # not base64
       raise MQLParseError(None, "Invalid cursor", cursor=encoded_cursor)
     except zlib.error:
@@ -315,7 +315,7 @@ def key_compare(needed_key, query_key):
 
 
 def find_key_in_query(key, query):
-  for k, v in query.iteritems():
+  for k, v in query.items():
     if key_compare(key, k):
       return k
   return None
@@ -427,7 +427,7 @@ def dict_recurse(q):
     """
   if isinstance(q, dict):
     yield q
-    for k, v in q.iteritems():
+    for k, v in q.items():
       for l in dict_recurse(v):
         yield l
   elif isinstance(q, list):
@@ -507,7 +507,7 @@ def high_elements(query, mode):
   return query.high_elements(mode)
 
   assert isinstance(
-      query, (basestring, int, long,
+      query, (str, int,
               float)), "Expected primitive type, but got a %s" % type(query)
 
   return EmptyListSingleton
@@ -515,7 +515,8 @@ def high_elements(query, mode):
 
 # In this case, 'one' is an original query, two is an already computed result.
 # So we compute the other result here.
-def mql_diff(query, (two, two_lbl), mss):
+def mql_diff(query, xxx_todo_changeme, mss):
+  (two, two_lbl) = xxx_todo_changeme
   result = mss.ctx.high_querier.read(query, mss.varenv)
   result_json = json.dumps(result, indent=True).splitlines()
   two_json = json.dumps(two, indent=True).splitlines()

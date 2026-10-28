@@ -258,7 +258,7 @@ class MQLTest(absltest.TestCase):
         response = {'response': response}
         exp_response = {'response': exp_response}
       if exp_response is None:
-        self.assertEquals(response, None)
+        self.assertEqual(response, None)
       else:
         self.assertDictEqual(
             response, exp_response

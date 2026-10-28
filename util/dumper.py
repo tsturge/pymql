@@ -19,7 +19,7 @@ def dump(object,depth=10, ctx=None):
         ctx = {}
         
     # don't subclass these types. Please!
-    if isinstance(object,(basestring,str,bool,int,float,long)):
+    if isinstance(object,(str,bool,int,float)):
         return object
     elif object is None:
         return object

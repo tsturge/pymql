@@ -14,9 +14,9 @@
 """quick and dirty parsing of graphd query language strings into python lists.
 """
 import re
-from grquoting import quote, unquote
+from .grquoting import quote, unquote
 
-from error import MQLGraphError, MQLDatelineInvalidError, MQLTimeoutError,\
+from .error import MQLGraphError, MQLDatelineInvalidError, MQLTimeoutError,\
     MQLCursorInvalidError, GraphIsSnapshottingError
 
 from pymql.log import LOG
@@ -278,7 +278,7 @@ class ReplyParser:
 # of course that's wrong.  hmmph.
 def print_result(l, indent=''):
   if l is None:
-    print indent + 'None'
+    print(indent + 'None')
     return
   #print type(l)
   if isinstance(l, list):
@@ -286,13 +286,13 @@ def print_result(l, indent=''):
     for li in l:
       if isinstance(li, list):
         if dangle:
-          print
+          print()
           dangle = 0
         print_result(li, indent + '    ')
       else:
         if not dangle:
-          print indent,
+          print(indent, end=' ')
           dangle = 1
-        print str(li),
+        print(str(li), end=' ')
     if dangle:
-      print
+      print()

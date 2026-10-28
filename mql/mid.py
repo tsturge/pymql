@@ -15,26 +15,26 @@
 
 # mid.py - machine ids.
 
-from cStringIO import StringIO
+from io import StringIO
 import sys
 
 ################################################################################
 ## version 1 constants
-VERSION = 1L
+VERSION = 1
 MAX_BITS = 40
 VERSION_BITS = 2
 OBJID_BITS = 34
 GRAPHID_BITS = MAX_BITS - VERSION_BITS - OBJID_BITS
 GRAPHID0 = 0x9202a8c04000641f
-GUID_BASE = 0x8000000000000000L
+GUID_BASE = 0x8000000000000000
 
-VERSION_MASK = (1L << VERSION_BITS) - 1L
-MAX_GRAPHS = 1L << GRAPHID_BITS
-GRAPHID_MASK = MAX_GRAPHS - 1L
-OBJID_MASK = (1L << OBJID_BITS) - 1L
+VERSION_MASK = (1 << VERSION_BITS) - 1
+MAX_GRAPHS = 1 << GRAPHID_BITS
+GRAPHID_MASK = MAX_GRAPHS - 1
+OBJID_MASK = (1 << OBJID_BITS) - 1
 
-VERSION_LEFT = (VERSION - 1) << 38L
-VERSION_RIGHT = (VERSION - 1) << 3L
+VERSION_LEFT = (VERSION - 1) << 38
+VERSION_RIGHT = (VERSION - 1) << 3
 
 ################################################################################
 ## Exceptions
@@ -66,7 +66,7 @@ class InvalidObjID(Exception):
 
 munch_map = [-1] * 256
 for i, c in enumerate("0123456789bcdfghjklmnpqrstvwxyz_"):
-  munch_map[ord(c)] = long(i)
+  munch_map[ord(c)] = int(i)
 
 
 ## a Munch (copyright W. Harris, 2010) is 5 bits.
@@ -107,8 +107,8 @@ def int_of_munchstr(str, ofs, l):
 
 
 def graphid_of_guid(guid):
-  graphid = long(guid[:16], 16)
-  ms_crap = long(guid[16:24], 16) & 0xfffffffc
+  graphid = int(guid[:16], 16)
+  ms_crap = int(guid[16:24], 16) & 0xfffffffc
   n = graphid - GRAPHID0
   if 0 <= n < MAX_GRAPHS and ms_crap == 0x80000000:
     return n
@@ -117,7 +117,7 @@ def graphid_of_guid(guid):
 
 
 def objid_of_guid(guid):
-  return long(guid[23:32], 16) & OBJID_MASK
+  return int(guid[23:32], 16) & OBJID_MASK
 
 
 def of_guid(guid):
@@ -141,7 +141,7 @@ def to_guid(mid):
 
   graphid = GRAPHID0 | version_munch & GRAPHID_MASK
   graphid = graphid << 64
-  objid = GUID_BASE | int_of_munchstr(mid, 4L, len_mid - 4)
+  objid = GUID_BASE | int_of_munchstr(mid, 4, len_mid - 4)
   guid = graphid | objid
   return hex(guid)[2:-1]  # chop off 0x and L
 
@@ -153,11 +153,11 @@ if __name__ == "__main__":
   o_guid = "9202a8c04000641f80000000013e068e"
 
   if len(sys.argv) < 2:
-    print "usage: mid.py <mid to decode>"
+    print("usage: mid.py <mid to decode>")
     sys.exit(1)
 
   mid = sys.argv[1]
-  print to_guid(mid)
+  print(to_guid(mid))
   #mid    = of_guid(o_guid)
   #print mid
   #n_guid = to_guid(mid)

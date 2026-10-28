@@ -587,22 +587,22 @@ class MQLTest(mql_fixture.MQLTest):
     {
       "lang": "/lang/ja",
       "type": "/type/text",
-      "value": "\u30a2\u30e1\u30ea\u30ab\u5408\u8846\u56fd"
+      "value": "\\u30a2\\u30e1\\u30ea\\u30ab\\u5408\\u8846\\u56fd"
     },
     {
       "lang": "/lang/sl",
       "type": "/type/text",
-      "value": "Zdru\u017eene dr\u017eave Amerike"
+      "value": "Zdru\\u017eene dr\\u017eave Amerike"
     },
     {
       "lang": "/lang/bg",
       "type": "/type/text",
-      "value": "\u0421\u044a\u0435\u0434\u0438\u043d\u0435\u043d\u0438 \u0430\u043c\u0435\u0440\u0438\u043a\u0430\u043d\u0441\u043a\u0438 \u0449\u0430\u0442\u0438"
+      "value": "\\u0421\\u044a\\u0435\\u0434\\u0438\\u043d\\u0435\\u043d\\u0438 \\u0430\\u043c\\u0435\\u0440\\u0438\\u043a\\u0430\\u043d\\u0441\\u043a\\u0438 \\u0449\\u0430\\u0442\\u0438"
     },
     {
       "lang": "/lang/sr",
       "type": "/type/text",
-      "value": "\u0421\u0458\u0435\u0434\u0438\u045a\u0435\u043d\u0435 \u0410\u043c\u0435\u0440\u0438\u0447\u043a\u0435 \u0414\u0440\u0436\u0430\u0432\u0435"
+      "value": "\\u0421\\u0458\\u0435\\u0434\\u0438\\u045a\\u0435\\u043d\\u0435 \\u0410\\u043c\\u0435\\u0440\\u0438\\u0447\\u043a\\u0435 \\u0414\\u0440\\u0436\\u0430\\u0432\\u0435"
     },
     {
       "lang": "/lang/lt",
@@ -612,7 +612,7 @@ class MQLTest(mql_fixture.MQLTest):
     {
       "lang": "/lang/ko",
       "type": "/type/text",
-      "value": "\ubbf8\uad6d"
+      "value": "\\ubbf8\\uad6d"
     },
     {
       "lang": "/lang/ro",
@@ -627,22 +627,22 @@ class MQLTest(mql_fixture.MQLTest):
     {
       "lang": "/lang/tr",
       "type": "/type/text",
-      "value": "Amerika Birle\u015fik Devletleri"
+      "value": "Amerika Birle\\u015fik Devletleri"
     },
     {
       "lang": "/lang/sk",
       "type": "/type/text",
-      "value": "Spojen\u00e9 \u0161t\u00e1ty"
+      "value": "Spojen\\u00e9 \\u0161t\\u00e1ty"
     },
     {
       "lang": "/lang/ca",
       "type": "/type/text",
-      "value": "Estats Units d'Am\u00e8rica"
+      "value": "Estats Units d'Am\\u00e8rica"
     },
     {
       "lang": "/lang/hu",
       "type": "/type/text",
-      "value": "Amerikai Egyes\u00fclt \u00c1llamok"
+      "value": "Amerikai Egyes\\u00fclt \\u00c1llamok"
     },
     {
       "lang": "/lang/da",
@@ -652,12 +652,12 @@ class MQLTest(mql_fixture.MQLTest):
     {
       "lang": "/lang/cs",
       "type": "/type/text",
-      "value": "Spojen\u00e9 st\u00e1ty americk\u00e9"
+      "value": "Spojen\\u00e9 st\\u00e1ty americk\\u00e9"
     },
     {
       "lang": "/lang/he",
       "type": "/type/text",
-      "value": "\u05d0\u05e8\u05e6\u05d5\u05ea \u05d4\u05d1\u05e8\u05d9\u05ea"
+      "value": "\\u05d0\\u05e8\\u05e6\\u05d5\\u05ea \\u05d4\\u05d1\\u05e8\\u05d9\\u05ea"
     },
     {
       "lang": "/lang/eo",
@@ -677,7 +677,7 @@ class MQLTest(mql_fixture.MQLTest):
     {
       "lang": "/lang/ru",
       "type": "/type/text",
-      "value": "\u0421\u043e\u0435\u0434\u0438\u043d\u0451\u043d\u043d\u044b\u0435 \u0428\u0442\u0430\u0442\u044b \u0410\u043c\u0435\u0440\u0438\u043a\u0438"
+      "value": "\\u0421\\u043e\\u0435\\u0434\\u0438\\u043d\\u0451\\u043d\\u043d\\u044b\\u0435 \\u0428\\u0442\\u0430\\u0442\\u044b \\u0410\\u043c\\u0435\\u0440\\u0438\\u043a\\u0438"
     },
     {
       "lang": "/lang/sv",
@@ -697,12 +697,12 @@ class MQLTest(mql_fixture.MQLTest):
     {
       "lang": "/lang/th",
       "type": "/type/text",
-      "value": "\u0e2a\u0e2b\u0e23\u0e31\u0e10\u0e2d\u0e40\u0e21\u0e23\u0e34\u0e01\u0e32"
+      "value": "\\u0e2a\\u0e2b\\u0e23\\u0e31\\u0e10\\u0e2d\\u0e40\\u0e21\\u0e23\\u0e34\\u0e01\\u0e32"
     },
     {
       "lang": "/lang/uk",
       "type": "/type/text",
-      "value": "\u0421\u043f\u043e\u043b\u0443\u0447\u0435\u043d\u0456 \u0428\u0442\u0430\u0442\u0438 \u0410\u043c\u0435\u0440\u0438\u043a\u0438"
+      "value": "\\u0421\\u043f\\u043e\\u043b\\u0443\\u0447\\u0435\\u043d\\u0456 \\u0428\\u0442\\u0430\\u0442\\u0438 \\u0410\\u043c\\u0435\\u0440\\u0438\\u043a\\u0438"
     },
     {
       "lang": "/lang/en",
@@ -712,7 +712,7 @@ class MQLTest(mql_fixture.MQLTest):
     {
       "lang": "/lang/zh",
       "type": "/type/text",
-      "value": "\u7f8e\u56fd"
+      "value": "\\u7f8e\\u56fd"
     },
     {
       "lang": "/lang/pt",
@@ -727,7 +727,7 @@ class MQLTest(mql_fixture.MQLTest):
     {
       "lang": "/lang/fr",
       "type": "/type/text",
-      "value": "\u00c9tats-Unis"
+      "value": "\\u00c9tats-Unis"
     }
   ]
 }
@@ -751,7 +751,7 @@ class MQLTest(mql_fixture.MQLTest):
       "id": "/en/united_states",
       "name": {
         "lang": "/lang/fr",
-        "value": "\u00c9tats-Unis"
+        "value": "\\u00c9tats-Unis"
       }
     }
     """
@@ -1172,9 +1172,9 @@ class MQLTest(mql_fixture.MQLTest):
     "Torben Joneleit",
     "Sophiane Baghdad",
     "Manuel Vallaurio",
-    "Andr\u00e9 Testut",
+    "Andr\\u00e9 Testut",
     "Clivio Piccione",
-    "St\u00e9phane Ortelli",
+    "St\\u00e9phane Ortelli",
     "Rainier III, Prince of Monaco",
     "Fabien Barel",
     "Patrice Servelle",
@@ -1186,7 +1186,7 @@ class MQLTest(mql_fixture.MQLTest):
     "Jeremy Bottin",
     "Alexandra Coletti",
     "Charlotte Casiraghi",
-    "St\u00e9phane Richelmi"
+    "St\\u00e9phane Richelmi"
   ]
     }
 

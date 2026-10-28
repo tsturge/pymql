@@ -25,10 +25,10 @@ if __name__ == '__main__':
 
 from pymql.log import LOG
 from pymql.tid import generate_transaction_id
-from grquoting import quote, unquote
+from .grquoting import quote, unquote
 
 
-from error import MQLInternalError, MQLParseError
+from .error import MQLInternalError, MQLParseError
 
 # Maximum segments in an id.
 MAX_ID_PARTS = 200
@@ -232,7 +232,7 @@ class NameMap:
             self.bootstrap = BootNamespace(self)
 
     def refresh(self,varenv):
-        for nsc in self.namespaces.itervalues():
+        for nsc in self.namespaces.values():
             nsc.refresh(varenv)
 
     def flush(self):
@@ -404,7 +404,7 @@ class NameMap:
         found = set()
         next = g
         # this is ridiculously deep - 18 ply.
-        for i in xrange(6):
+        for i in range(6):
             res = self.lookup_by_guid_oneoff_internal(next, varenv)
 
             if not res:

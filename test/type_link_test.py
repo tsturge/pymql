@@ -1697,7 +1697,7 @@ class MQLTest(mql_fixture.MQLTest):
           "id": "/lang/he"
         },
         "target_value": {
-          "value": "\u05d1\u05d5\u05d1 \u05d3\u05d9\u05dc\u05df"
+          "value": "\\u05d1\\u05d5\\u05d1 \\u05d3\\u05d9\\u05dc\\u05df"
         }
       }
     ]

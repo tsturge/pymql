@@ -19,6 +19,6 @@ __author__ = 'nicholasv@google.com (Nicholas Veeser)'
 
 __all__ = ['TcpGraphConnector', 'MockRecordConnector', 'MockReplayConnector']
 
-from conn_tcp import TcpGraphConnector
-from conn_mock import MockRecordConnector
-from conn_mock import MockReplayConnector
+from .conn_tcp import TcpGraphConnector
+from .conn_mock import MockRecordConnector
+from .conn_mock import MockReplayConnector

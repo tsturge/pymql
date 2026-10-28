@@ -422,7 +422,7 @@ def _canonical_index(mockdata):
   index = _CANONICAL_INDEXES.get(id(mockdata))
   if index is None:
     index = {}
-    for key, entry in mockdata.items():
+    for key, entry in list(mockdata.items()):
       if not isinstance(entry, list):
         continue  # a test's fuzz value
       n = int(key.split('_')[1]) if '_' in key else 0

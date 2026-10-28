@@ -364,16 +364,16 @@ class MQLTest(mql_fixture.MQLTest):
           "value": "Bob Dylan"
         },
         {
-          "value": "\u0414\u0438\u043b\u0430\u043d, \u0411\u043e\u0431"
+          "value": "\\u0414\\u0438\\u043b\\u0430\\u043d, \\u0411\\u043e\\u0431"
         },
         {
-          "value": "\u0411\u043e\u0431 \u0414\u0456\u043b\u0430\u043d"
+          "value": "\\u0411\\u043e\\u0431 \\u0414\\u0456\\u043b\\u0430\\u043d"
         },
         {
-          "value": "\u30dc\u30d6\u30fb\u30c7\u30a3\u30e9\u30f3"
+          "value": "\\u30dc\\u30d6\\u30fb\\u30c7\\u30a3\\u30e9\\u30f3"
         },
         {
-          "value": "\u9c8d\u52c3\u00b7\u8fea\u4f26"
+          "value": "\\u9c8d\\u52c3\\u00b7\\u8fea\\u4f26"
         }
       ]
     }
@@ -673,7 +673,7 @@ class MQLTest(mql_fixture.MQLTest):
       "id": "/en/bob_dylan",
       "name": {
         "lang": "/lang/ja",
-        "value": "\u30dc\u30d6\u30fb\u30c7\u30a3\u30e9\u30f3"
+        "value": "\\u30dc\\u30d6\\u30fb\\u30c7\\u30a3\\u30e9\\u30f3"
       }
     }
     """
@@ -1059,16 +1059,16 @@ class MQLTest(mql_fixture.MQLTest):
           "value": "Bob Dylan"
         },
         {
-          "value": "\u0414\u0438\u043b\u0430\u043d, \u0411\u043e\u0431"
+          "value": "\\u0414\\u0438\\u043b\\u0430\\u043d, \\u0411\\u043e\\u0431"
         },
         {
-          "value": "\u0411\u043e\u0431 \u0414\u0456\u043b\u0430\u043d"
+          "value": "\\u0411\\u043e\\u0431 \\u0414\\u0456\\u043b\\u0430\\u043d"
         },
         {
-          "value": "\u30dc\u30d6\u30fb\u30c7\u30a3\u30e9\u30f3"
+          "value": "\\u30dc\\u30d6\\u30fb\\u30c7\\u30a3\\u30e9\\u30f3"
         },
         {
-          "value": "\u9c8d\u52c3\u00b7\u8fea\u4f26"
+          "value": "\\u9c8d\\u52c3\\u00b7\\u8fea\\u4f26"
         }
       ]
     }
@@ -1099,19 +1099,19 @@ class MQLTest(mql_fixture.MQLTest):
         },
         {
           "lang": "/lang/ru",
-          "value": "\u0414\u0438\u043b\u0430\u043d, \u0411\u043e\u0431"
+          "value": "\\u0414\\u0438\\u043b\\u0430\\u043d, \\u0411\\u043e\\u0431"
         },
         {
           "lang": "/lang/uk",
-          "value": "\u0411\u043e\u0431 \u0414\u0456\u043b\u0430\u043d"
+          "value": "\\u0411\\u043e\\u0431 \\u0414\\u0456\\u043b\\u0430\\u043d"
         },
         {
           "lang": "/lang/ja",
-          "value": "\u30dc\u30d6\u30fb\u30c7\u30a3\u30e9\u30f3"
+          "value": "\\u30dc\\u30d6\\u30fb\\u30c7\\u30a3\\u30e9\\u30f3"
         },
         {
           "lang": "/lang/zh",
-          "value": "\u9c8d\u52c3\u00b7\u8fea\u4f26"
+          "value": "\\u9c8d\\u52c3\\u00b7\\u8fea\\u4f26"
         }
       ]
     }
@@ -1237,7 +1237,7 @@ class MQLTest(mql_fixture.MQLTest):
         {
           "lang": "/lang/he",
           "type": "/type/text",
-          "value": "\u05d1\u05d5\u05d1 \u05d3\u05d9\u05dc\u05df"
+          "value": "\\u05d1\\u05d5\\u05d1 \\u05d3\\u05d9\\u05dc\\u05df"
         },
         {
           "lang": "/lang/es",
@@ -1247,7 +1247,7 @@ class MQLTest(mql_fixture.MQLTest):
         {
           "lang": "/lang/zh",
           "type": "/type/text",
-          "value": "\u9c8d\u52c3\u00b7\u8fea\u4f26"
+          "value": "\\u9c8d\\u52c3\\u00b7\\u8fea\\u4f26"
         },
         {
           "lang": "/lang/fr",
@@ -1292,17 +1292,17 @@ class MQLTest(mql_fixture.MQLTest):
         {
           "lang": "/lang/ru",
           "type": "/type/text",
-          "value": "\u0414\u0438\u043b\u0430\u043d, \u0411\u043e\u0431"
+          "value": "\\u0414\\u0438\\u043b\\u0430\\u043d, \\u0411\\u043e\\u0431"
         },
         {
           "lang": "/lang/sr",
           "type": "/type/text",
-          "value": "\u0411\u043e\u0431 \u0414\u0438\u043b\u0430\u043d"
+          "value": "\\u0411\\u043e\\u0431 \\u0414\\u0438\\u043b\\u0430\\u043d"
         },
         {
           "lang": "/lang/ja",
           "type": "/type/text",
-          "value": "\u30dc\u30d6\u30fb\u30c7\u30a3\u30e9\u30f3"
+          "value": "\\u30dc\\u30d6\\u30fb\\u30c7\\u30a3\\u30e9\\u30f3"
         },
         {
           "lang": "/lang/ca",
@@ -1677,17 +1677,17 @@ class MQLTest(mql_fixture.MQLTest):
     """Regression test for issue 4970606"""
 
     query = """
-      [{"name":"Beyonc\u00e9", "id": null}]
+      [{"name":"Beyonc\\u00e9", "id": null}]
     """
     exp_response = """
     [
       {
         "id": "/en/beyonce",
-        "name": "Beyonc\u00e9"
+        "name": "Beyonc\\u00e9"
       },
       {
         "id": "/m/07ldnn6",
-        "name": "Beyonc\u00e9"
+        "name": "Beyonc\\u00e9"
       }
     ]
     """
@@ -1698,17 +1698,17 @@ class MQLTest(mql_fixture.MQLTest):
     """Regression test for issue 4970606"""
 
     query = """
-      [{"name":"Beyonc\u00e9", "id": null}]
+      [{"name":"Beyonc\\u00e9", "id": null}]
     """
     exp_response = """
     [
       {
         "id": "/en/beyonce",
-        "name": "Beyonc\u00e9"
+        "name": "Beyonc\\u00e9"
       },
       {
         "id": "/m/07ldnn6",
-        "name": "Beyonc\u00e9"
+        "name": "Beyonc\\u00e9"
       }
     ]
     """
@@ -1724,11 +1724,11 @@ class MQLTest(mql_fixture.MQLTest):
     [
       {
         "id": "/en/beyonce",
-        "name": "Beyonc\u00e9"
+        "name": "Beyonc\\u00e9"
       },
       {
         "id": "/m/07ldnn6",
-        "name": "Beyonc\u00e9"
+        "name": "Beyonc\\u00e9"
       }
     ]
     """

@@ -41,7 +41,7 @@ def _logit(level, s, args=None, kwargs=None):
   if args:
     msg += '\t'.join(str(arg) for arg in args)
   if kwargs:
-    msg += '\t'.join('%s=%s' % (pair) for pair in kwargs.iteritems())
+    msg += '\t'.join('%s=%s' % (pair) for pair in kwargs.items())
   logging.vlog(level, '%s %s' % (s, msg))
 
 
@@ -105,7 +105,7 @@ def generate_tid(token=None, hostport=None):
   if not hostport:
     hostport = '%s:0' % hostname
   # hostport could be just a port, we prefix it with hostname then
-  elif isinstance(hostport, (int, long)):
+  elif isinstance(hostport, int):
     hostport = '%s:%d' % (hostname, hostport)
   elif ':' not in hostport:
     hostport = '%s:%s' % (hostname, hostport)

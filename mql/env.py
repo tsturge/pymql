@@ -12,9 +12,9 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-from grquoting import quote, unquote
+from .grquoting import quote, unquote
 import cgi
-from utils import Missing, valid_mid, valid_mql_key
+from .utils import Missing, valid_mid, valid_mql_key
 
 
 class Varenv(dict):
@@ -44,12 +44,12 @@ class Varenv(dict):
     self.lookup_manager = LookupManager(lookup, self)
 
     if keys is None:
-      keys = underlying_dict.iterkeys()
+      keys = iter(underlying_dict.keys())
 
     for key in keys:
       if key in underlying_dict:
         val = underlying_dict[key]
-        if isinstance(val, unicode):
+        if isinstance(val, str):
           val = val.encode('utf-8')
 
         self[key] = val
@@ -230,10 +230,10 @@ class LookupManager(object):
     if isinstance(result, DeferredIdLookup):
       return result.id
     elif isinstance(result, list):
-      return map(self.substitute_ids, result)
+      return list(map(self.substitute_ids, result))
     elif isinstance(result, dict):
       newdict = {}
-      for key, item in result.iteritems():
+      for key, item in result.items():
         if isinstance(key, DeferredIdLookup):
           key = key.id
         newdict[key] = self.substitute_ids(item)
@@ -249,10 +249,10 @@ class LookupManager(object):
       if result and isinstance(result[0], DeferredMidsOfGuidLookup):
         return result[0].mid
       else:
-        return map(self.substitute_mids, result)
+        return list(map(self.substitute_mids, result))
     elif isinstance(result, dict):
       newdict = {}
-      for key, item in result.iteritems():
+      for key, item in result.items():
         if isinstance(item, DeferredMidOfGuidLookup):
           item = item.mid[0]
         elif isinstance(item, DeferredMidsOfGuidLookup):
@@ -265,10 +265,10 @@ class LookupManager(object):
     if isinstance(result, DeferredIdLookup):
       return result.guid
     elif isinstance(result, list):
-      return map(self.substitute_guids, result)
+      return list(map(self.substitute_guids, result))
     elif isinstance(result, dict):
       newdict = {}
-      for key, item in result.iteritems():
+      for key, item in result.items():
         if isinstance(key, DeferredIdLookup):
           key = key.guid
         newdict[key] = self.substitute_guids(item)
@@ -339,7 +339,7 @@ class DeferredGuidLookup(Guid):
     return self.id
 
   def __eq__(self, other):
-    if isinstance(other, basestring):
+    if isinstance(other, str):
       return self.id == other
     return self.id == other.id
 
@@ -414,7 +414,7 @@ class DeferredGuidOfMidLookup(Guid):
     return self.mid
 
   def __eq__(self, other):
-    if isinstance(other, basestring):
+    if isinstance(other, str):
       return self.mid == other
     return self.mid == other.mid
 
@@ -503,7 +503,7 @@ class DeferredIdLookup(Guid):
 
   def __eq__(self, other):
     try:
-      if isinstance(other, str) or isinstance(other, unicode):
+      if isinstance(other, str) or isinstance(other, str):
         rv = self.guid == other
         if not rv:
           return False
@@ -528,7 +528,7 @@ _make_boolean = {'true': True, 'false': False}
 def quote_value(v):
   if isinstance(v, bool):
     return quote(_boolean_name[v])
-  elif isinstance(v, (int, long, float)):
+  elif isinstance(v, (int, float)):
     return quote(str(v))
   elif isinstance(v, str):
     return quote(v)

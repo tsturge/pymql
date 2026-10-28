@@ -24,11 +24,11 @@ def quotekey(ustr):
     valid_interior_only = valid_always + '-'
 
     if isinstance(ustr, str):
-        s = unicode(ustr,'utf-8')
-    elif isinstance(ustr, unicode):
+        s = str(ustr,'utf-8')
+    elif isinstance(ustr, str):
         s = ustr
     else:
-        raise ValueError, 'quotekey() expects utf-8 string or unicode'
+        raise ValueError('quotekey() expects utf-8 string or unicode')
 
     if len(s) == 0:
         return str(s)
@@ -72,7 +72,7 @@ def unquotekey(key, encoding=None):
             i += 1
         elif key[i] == '$' and i+4 < len(key):
             # may raise ValueError if there are invalid characters
-            output.append(unichr(int(key[i+1:i+5],16)))
+            output.append(chr(int(key[i+1:i+5],16)))
             i += 5
         else:
             msg = "key %s has invalid character %s at position %d" % (
@@ -82,7 +82,7 @@ def unquotekey(key, encoding=None):
             )
             raise error.MQLInternalError(None, msg)
 
-    ustr = u''.join(output)
+    ustr = ''.join(output)
 
     if encoding is None:
         return ustr
@@ -125,7 +125,7 @@ def id_to_urlid(id):
         return '%23' + id[1:]
 
     if id[0] != '/':
-        raise ValueError, 'unknown id format %s' % id
+        raise ValueError('unknown id format %s' % id)
 
     # ok, we have a slash-path
     # requote components as keys and rejoin.

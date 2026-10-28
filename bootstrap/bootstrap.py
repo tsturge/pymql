@@ -52,7 +52,7 @@ class Bootstrap(object):
   def mkprim(self, **kwds):
     if 'scope' not in kwds and self.root_user:
       kwds['scope'] = self.root_user
-    params = ' '.join(['%s=%s' % (k, v) for (k, v) in kwds.items()])
+    params = ' '.join(['%s=%s' % (k, v) for (k, v) in list(kwds.items())])
     result = self.gc.write_varenv('(%s)' % params, {})
     return result[0]
 

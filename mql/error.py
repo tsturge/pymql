@@ -38,9 +38,9 @@ class MQLParameterizedError(Exception):
     if self.kwds:
       try:
         return self.msg % self.kwds
-      except KeyError, e:
+      except KeyError as e:
         return '%s %s' % (self.msg, self.kwds)
-      except TypeError, e:
+      except TypeError as e:
         return '%s %s' % (self.msg, self.kwds)
 
     else:
@@ -83,7 +83,7 @@ class MQLError(MQLParameterizedError):
     for key in self.kwds:
       if not isinstance(
           self.kwds[key],
-          (basestring, int, long, float, dict, list, bool, type(None))):
+          (str, int, float, dict, list, bool, type(None))):
         self.kwds[key] = str(self.kwds[key])
 
     self.error['info'] = self.kwds

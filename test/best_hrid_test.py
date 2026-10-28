@@ -46,7 +46,7 @@ class HRIDTest(mql_fixture.MQLTest):
     }
     """ % best_hrid
     self.DoQuery(query, mqlwrite=True)
-    self.assertEquals(self.mql_result.result["create"],
+    self.assertEqual(self.mql_result.result["create"],
                       "created")
     return self.mql_result.result["guid"]
 

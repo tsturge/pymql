@@ -14,7 +14,7 @@
 
 import re
 from xml.sax import saxutils
-import urllib
+import urllib.request, urllib.parse, urllib.error
 import cgi
 
 from pymql.error import FormattingError
@@ -98,7 +98,7 @@ def escapeUrl(data):
     escape. Letters, digits, and the characters "/_.-" are never
     escaped.
     """
-  return (urllib.quote(data))
+  return (urllib.parse.quote(data))
 
 
 def escapeMarkup(data):
@@ -112,9 +112,9 @@ def escapeMarkup(data):
 ######################################################################
 
 if __name__ == '__main__':
-  print quote("\n\r\t\"\\foo\\\"")  # result is "\n\r\t\"\\foo\\\"" (duh)
-  print unquote(
+  print(quote("\n\r\t\"\\foo\\\""))  # result is "\n\r\t\"\\foo\\\"" (duh)
+  print(unquote(
       "\"foo\\n\\\"\\\\\""
-  )  # result is foo<newline>"\ -- note that python sees "foo\n\"\\"
-  print unquote(
-      "\"foo\\\"\\\"")  # should die with an "illegal quoted string" exception
+  ))  # result is foo<newline>"\ -- note that python sees "foo\n\"\\"
+  print(unquote(
+      "\"foo\\\"\\\""))  # should die with an "illegal quoted string" exception

@@ -47,11 +47,11 @@ def main(argv):
     env = json.loads(FLAGS.mqlenv)
 
   if FLAGS.mqlcmd == "read":
-    print mql.read(q, **env)
+    print(mql.read(q, **env))
   elif FLAGS.mqlcmd == "write":
-    print mql.write(q, **env)
+    print(mql.write(q, **env))
   else:
-    print "you must provie a --mqlcmd, either 'read' or 'write'"
+    print("you must provie a --mqlcmd, either 'read' or 'write'")
 
 
 if __name__ == "__main__":

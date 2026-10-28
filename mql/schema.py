@@ -18,9 +18,9 @@
 # Support for understanding user defined types, relationships, properties etc.
 #
 
-from utils import valid_idname, valid_guid, valid_key, reserved_word, find_key_in_query
-from error import MQLParseError, MQLInternalError, MQLTypeError
-from env import Guid
+from .utils import valid_idname, valid_guid, valid_key, reserved_word, find_key_in_query
+from .error import MQLParseError, MQLInternalError, MQLTypeError
+from .env import Guid
 
 from pymql.util import keyquote
 from pymql.log import LOG
@@ -200,7 +200,7 @@ class SchemaNode(Guid):
 # XXX should we drive this off the schema for the type somewhere?
 _datatype_map = {
     int: 'integer',
-    long: 'integer',
+    int: 'integer',
     str: 'string',
     float: 'float',
     bool: 'boolean'
@@ -716,7 +716,7 @@ class SchemaType(SchemaNode):
       if dtype == 'enumeration':
         return keyquote.unquotekey(value)
       elif unicode_text:
-        return unicode(value, 'utf-8')
+        return str(value, 'utf-8')
 
     return value
 

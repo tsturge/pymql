@@ -25,18 +25,18 @@ from pymql.error import EmptyResult
 #from pymql import json
 import json
 
-import scope
-import lookup
+from . import scope
+from . import lookup
 import pprint
 import cgi
 
-from qprim import QueryPrimitive
-from utils import (element, elements, dict_recurse, valid_relname, follow_path,
+from .qprim import QueryPrimitive
+from .utils import (element, elements, dict_recurse, valid_relname, follow_path,
                    is_direct_pointer, valid_precompiled_sort, ReadMode,
                    WriteMode, PrepareMode, CheckMode, QueryDict, QueryList,
                    ResultDict, Missing)
-from error import MQLResultError, MQLInternalError, MQLInternalParseError, MQLAccessError, MQLGraphError
-from env import Varenv
+from .error import MQLResultError, MQLInternalError, MQLInternalParseError, MQLAccessError, MQLGraphError
+from .env import Varenv
 
 
 class LowQuery(object):
@@ -50,15 +50,15 @@ class LowQuery(object):
       rv = QueryDict(original_query=query)
       if hasattr(query, 'high_query'):
         rv.high_query = query.high_query
-      for key, value in query.iteritems():
+      for key, value in query.items():
         rv[key] = self.make_orig(value)
 
     elif isinstance(query, (list, set)):
       rv = QueryList()
       rv.extend(self.make_orig(elem) for elem in query)
-    elif isinstance(query, (str, float, int, long, bool, type(None))):
+    elif isinstance(query, (str, float, int, bool, type(None))):
       rv = query
-    elif isinstance(query, unicode):
+    elif isinstance(query, str):
       raise MQLInternalParseError(
           None,
           'Unicode strings not supported in direct interface. Use utf-8 instead.',
@@ -87,7 +87,7 @@ class LowQuery(object):
       # ie. that there is only a link here, no node.
       # note that ? is not counted as a non-terminal
       terminal = True
-      for key, clause in query.iteritems():
+      for key, clause in query.items():
         if key[0] not in '?:':
           terminal = False
 
@@ -335,7 +335,7 @@ class LowQuery(object):
       # also add :reverse if the type had a leading - sign
 
       # we may add @guid (from @id) and :typeguid (from :type) so the dictionary may increase in size.
-      for key in sorted(item.iterkeys()):
+      for key in sorted(item.keys()):
         if valid_relname(key):
           if key[0] in '+-':
             newtype = key[1:]
@@ -566,7 +566,7 @@ class LowQuery(object):
             'Duplicate index %(index)s in ordered list',
             key=qlist.key,
             index=index)
-      if not isinstance(index, (int, long)) or not index >= 0:
+      if not isinstance(index, int) or not index >= 0:
         raise MQLInternalParseError(
             qlist.parent_clause,
             'Illegal index %(index)s',
@@ -611,7 +611,7 @@ class LowQuery(object):
 
     # this is a list of all the things that we saw in the new correct order
     # This is used in qprim.py:generate_new_order()
-    new_order = [indexes[x].link for x in sorted(indexes.iterkeys())]
+    new_order = [indexes[x].link for x in sorted(indexes.keys())]
 
     # now build the QP object to query the indexes
     index_qp = QueryPrimitive('&', qlist.order_dict, mode)
@@ -690,7 +690,7 @@ class LowQuery(object):
         filter_result.append(self.filter_query_result(elem, varenv))
     elif isinstance(result, dict):
       filter_result = {}
-      for key, asked in result.query.original_query.iteritems():
+      for key, asked in result.query.original_query.items():
         if key[0] in '@:':
           basekey = key[1:]
           if basekey == 'id':
@@ -782,7 +782,7 @@ class LowQuery(object):
           elem[':index'] = None
 
       i = 0
-      for value in sorted(values.iterkeys()):
+      for value in sorted(values.keys()):
         values[value][':index'] = i
         i += 1
 
@@ -1186,7 +1186,7 @@ class LowQuery(object):
         try:
           gresult = self.gc.write_varenv(writeq, varenv)
           has_written = True
-        except MQLGraphError, e:
+        except MQLGraphError as e:
           subclass = e.get_kwd('subclass')
           if subclass == 'EXISTS' and write_primitive.unique == 'key':
             # must have gotten here due to a race condition in creating a
@@ -1582,7 +1582,7 @@ def cmdline_main():
   if options.raw:
     pprint.pprint(result)
   else:
-    print json.struct2json(result)
+    print(json.struct2json(result))
 
 
 if __name__ == '__main__':

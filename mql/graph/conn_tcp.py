@@ -137,7 +137,7 @@ class TcpGraphConnector(GraphConnector):
 
         break  # got it
 
-      except (MQLConnectionError, MQLTimeoutError), e:
+      except (MQLConnectionError, MQLTimeoutError) as e:
         self._record_failure(self.addr)
 
     else:
@@ -253,7 +253,7 @@ class TcpGraphConnector(GraphConnector):
 
         break
 
-      except GraphIsSnapshottingError, e:
+      except GraphIsSnapshottingError as e:
         # The connection is OK, but we need to break it
         # so that when we try again we'll reconnect somewhere else.
         self.tcp_conn.disconnect()
@@ -262,7 +262,7 @@ class TcpGraphConnector(GraphConnector):
         cost = coststr_to_dict(e.cost)
         costs.append(cost)
 
-      except MQLConnectionError, e:
+      except MQLConnectionError as e:
         # only trap MQLConnectionError, not MQLTimeoutError.
         # most of the time a timeout error say "this query is too hard"
         # don't shop it around and force everyone else to timeout too.
@@ -272,7 +272,7 @@ class TcpGraphConnector(GraphConnector):
         cost = coststr_to_dict(e.cost)
         costs.append(cost)
 
-      except MQLError, e:
+      except MQLError as e:
         # all other errors, collect the cost and reraise
         cost = coststr_to_dict(e.cost)
         costs.append(cost)
@@ -283,7 +283,7 @@ class TcpGraphConnector(GraphConnector):
         # accumulate all the costs from successes *and* failures
         for cost in costs:
           if cost:
-            for k, v in cost.iteritems():
+            for k, v in cost.items():
               self.totalcost[k] += v
 
     else:
@@ -339,7 +339,7 @@ class TcpConnection(object):
     try:
       self.socket.connect((self.host, self.port))
 
-    except socket.gaierror, e:
+    except socket.gaierror as e:
       self.disconnect()
       raise MQLConnectionError(
           None,
@@ -347,7 +347,7 @@ class TcpConnection(object):
           host=self.host,
           port=self.port,
           detail=list(e.args))
-    except socket.error, e:
+    except socket.error as e:
       self.disconnect()
       raise MQLConnectionError(
           None,
@@ -393,7 +393,7 @@ class TcpConnection(object):
       self.pending = s
       self.socket.sendall(s)
 
-    except socket.timeout, e:
+    except socket.timeout as e:
       self.disconnect()
       raise MQLConnectionError(
           self.pending,
@@ -401,7 +401,7 @@ class TcpConnection(object):
           host=self.host,
           port=self.port,
           detail=list(e.args))
-    except socket.error, e:
+    except socket.error as e:
       self.disconnect()
       raise MQLConnectionError(
           self.pending,
@@ -441,7 +441,7 @@ class TcpConnection(object):
       while 1:
         try:
           b = self.socket.recv(8192)
-        except socket.timeout, e:
+        except socket.timeout as e:
           # we disconnect before we raise MQLConnectionError. That way if
           # the MQLConnectionError is not caught we don't leave a dangling
           # connection (with graphd still doing work behind it.)
@@ -452,7 +452,7 @@ class TcpConnection(object):
               host=self.host,
               port=self.port,
               detail=list(e.args))
-        except socket.error, e:
+        except socket.error as e:
           self.disconnect()
           raise MQLConnectionError(
               self.pending,

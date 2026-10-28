@@ -17,4 +17,4 @@
 
 __author__ = 'bneutra@google.com (Brendan Neutra)'
 
-from log import *
+from .log import *

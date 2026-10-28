@@ -22,13 +22,13 @@ import json
 #from pymql import json
 
 # these should probably be in a separate utility class
-from utils import (QueryDict, QueryList, element, high_elements, ReadMode,
+from .utils import (QueryDict, QueryList, element, high_elements, ReadMode,
                    WriteMode, CheckMode, valid_comparison,
                    make_comparison_truekey, valid_high_idname, valid_mql_key,
                    reserved_word, valid_guid, valid_key, valid_mid, Missing)
-import schema
+from . import schema
 
-from readqp import ReadQP
+from .readqp import ReadQP
 
 import pprint
 import traceback
@@ -230,7 +230,7 @@ class HighQuery(object):
 
       return high_result
 
-    except Exception, e:
+    except Exception as e:
 
       # XXX
       # This should be consolidated with the gathering above, but the
@@ -262,7 +262,7 @@ class HighQuery(object):
       query = self.make_orig(orig_query, varenv, True)
       self.resolve_names(query, varenv, mode)
       return query
-    except MQLTypeError, e:
+    except MQLTypeError as e:
       # debug ME-907
       LOG.debug(
           'mql.hijson.HighQuery.resolve_schema',
@@ -318,7 +318,7 @@ class HighQuery(object):
 
         return query
 
-      except MQLTypeError, mt:
+      except MQLTypeError as mt:
         raise
 
   def create_graph_query(self, orig_query, varenv, transaction_id):
@@ -376,7 +376,7 @@ class HighQuery(object):
 
       for key in query:
         if not isinstance(key, str):
-          if isinstance(key, unicode):
+          if isinstance(key, str):
             try:
               key = key.encode('ascii')
             except UnicodeEncodeError:
@@ -422,7 +422,7 @@ class HighQuery(object):
       raise MQLParseError(
           None, 'Queries must start with a dictionary or list of dictionaries')
 
-    elif isinstance(query, (float, int, long, bool)):
+    elif isinstance(query, (float, int, bool)):
       rv = QueryDict(original_query=query, terminal='V', value=query)
     elif isinstance(query, str):
       if len(query) > 4096:
@@ -433,7 +433,7 @@ class HighQuery(object):
 
     elif query is None:
       rv = QueryDict(original_query=query, terminal='N', value=None)
-    elif isinstance(query, unicode):
+    elif isinstance(query, str):
       # support unicode and silently transcode into utf-8
       newstr = query.encode('utf-8')
       if len(newstr) > 4096:
@@ -441,7 +441,7 @@ class HighQuery(object):
             None, 'String greater than 4096 bytes in length', value=query)
 
       rv = QueryDict(original_query=query, terminal='V', value=newstr)
-    elif isinstance(query, long):
+    elif isinstance(query, int):
       raise MQLParseError(
           None, "Integer value out of range '%(value)s'", value=str(query))
     else:
@@ -455,10 +455,10 @@ class HighQuery(object):
   def validate_directive(self, key, value):
 
     # currently just normalizes unicode strings if necessary -- performs no actual parameter checks.
-    if isinstance(value, (str, float, int, long, bool)) or value is None:
+    if isinstance(value, (str, float, int, bool)) or value is None:
       # null isn't really valid, but we'd rather solve that problem at the individual directive level for now.
       return value
-    elif isinstance(value, unicode):
+    elif isinstance(value, str):
       try:
         return value.encode('ascii')
       except UnicodeEncodeError:
@@ -525,7 +525,7 @@ class HighQuery(object):
             propname, varenv, recurse=False)
         if reversed:
           sprop = sprop.get_reversed(varenv)
-      except MQLTypeError, e:
+      except MQLTypeError as e:
         e.set_query(query)
         raise
     elif len(keylist) == 1:
@@ -538,7 +538,7 @@ class HighQuery(object):
 
       try:
         sprop = stype.getprop(keylist[0], varenv)
-      except MQLTypeError, e:
+      except MQLTypeError as e:
         e.set_query(query)
         raise
     else:
@@ -609,7 +609,7 @@ class HighQuery(object):
         if typename[0] == '/':
           try:
             stype = self.schema_factory.get_or_add_type(typename, varenv)
-          except MQLError, e:
+          except MQLError as e:
             e.set_query(query)
             raise
         else:
@@ -850,7 +850,7 @@ class HighQuery(object):
     expanded_macro = self.make_orig(macrodict, varenv)
 
     # and copy it into the query if it doesn't duplicate
-    for key, item in expanded_macro.iteritems():
+    for key, item in expanded_macro.items():
       if key not in query:
         # the parent_clause changes, but not key or list
         item.parent_clause = query
@@ -1050,7 +1050,7 @@ class HighQuery(object):
     # comparison operators we found into them....
     # This is an ugly way to do it in two passes...
     properties = []
-    for key in sorted(query.iterkeys()):
+    for key in sorted(query.keys()):
       if key in self.read_directives:
         # don't attempt to process directives here right now, just check they're not misused.
         if mode is not ReadMode:
@@ -1111,7 +1111,7 @@ class HighQuery(object):
                 'Must specify %(key)s in a write, cannot query it',
                 key=key,
                 mode=str(mode))
-          elif not isinstance(subq.value, (long, int)) or subq.value < 0:
+          elif not isinstance(subq.value, int) or subq.value < 0:
             raise MQLParseError(
                 query,
                 '%(key)s must be a non-negative integer, not %(value)s',
@@ -1417,12 +1417,12 @@ class HighQuery(object):
       link.add_result('datatype')
       link.add_result('value')
 
-    except MQLTypeError, e:
+    except MQLTypeError as e:
       e.set_query(query)
       raise
 
     if dpn in query and query[dpn].comparisons is not None:
-      for (compop, compval) in query[dpn].comparisons.iteritems():
+      for (compop, compval) in query[dpn].comparisons.items():
 
         if compop == '|=':
           # need to check this first since it comes with a list of values
@@ -1505,7 +1505,7 @@ class HighQuery(object):
 
   def add_query_primitive_recurse(self, query, varenv, mode):
     #for key, item in query.iteritems():
-    for key in sorted(query.iterkeys()):
+    for key in sorted(query.keys()):
       item = query[key]
       if key == 'link':
         self.add_query_primitive_link(item, varenv, mode)
@@ -1665,7 +1665,7 @@ class HighQuery(object):
       underlying_node.timestamp = value
 
     if dpn in query and query[dpn].comparisons is not None:
-      for (compop, compval) in query[dpn].comparisons.iteritems():
+      for (compop, compval) in query[dpn].comparisons.items():
         if compop in ['~=', '|=']:
           # see bug # 1067.
           raise MQLTypeError(
@@ -1779,7 +1779,7 @@ class HighQuery(object):
       underlying_node.add_result('guid')
     # rubbish
     if dpn in query and query[dpn].comparisons is not None:
-      for (compop, compval) in query[dpn].comparisons.iteritems():
+      for (compop, compval) in query[dpn].comparisons.items():
         if underlying_node.guid is not None:
           raise MQLParseError(
               query,
@@ -1874,7 +1874,7 @@ class HighQuery(object):
     # validate the guid
     if value is not None:
       if (sprop.id == '/type/object/guid' and
-          (not isinstance(value, basestring) or not valid_guid(value))):
+          (not isinstance(value, str) or not valid_guid(value))):
         raise MQLParseError(
             query, 'Can only use a hexadecimal guid here', value=value)
       elif stype.get_datatype(value) not in (None, 'guid'):
@@ -1902,7 +1902,7 @@ class HighQuery(object):
     # only |= is valid on id or guid
     if dpn in query and query[dpn].comparisons is not None:
       # can't use iteritems() as we are changing the dict
-      for (compop, compval) in query[dpn].comparisons.iteritems():
+      for (compop, compval) in query[dpn].comparisons.items():
         if underlying_node.guid is not None:
           raise MQLParseError(
               query,
@@ -2321,7 +2321,7 @@ class HighQuery(object):
       value = query['limit']
       # need to put @pagesize on the outermost part of the query, :pagesize elsewhere
       if isinstance(value,
-                    (int, long)) and value >= 0 and not isinstance(value, bool):
+                    int) and value >= 0 and not isinstance(value, bool):
         qp.pagesize = value
       else:
         raise MQLParseError(
@@ -2712,7 +2712,7 @@ class HighQuery(object):
       low_json['@timestamp'] = value
 
     if dpn in query and query[dpn].comparisons is not None:
-      for (compop, compval) in query[dpn].comparisons.iteritems():
+      for (compop, compval) in query[dpn].comparisons.items():
         if compop in ['~=', '|=']:
           # see bug # 1067.
           raise MQLTypeError(
@@ -2783,14 +2783,14 @@ class HighQuery(object):
           value = self.lookup_high_guid(value, varenv)
 
         low_json['@guid'] = value
-      except MQLError, e:
+      except MQLError as e:
         e.set_query(query)
         raise e
 
     # only |= is valid on id or guid
     if dpn in query and query[dpn].comparisons is not None:
       # can't use iteritems() as we are changing the dict
-      for (compop, compval) in query[dpn].comparisons.iteritems():
+      for (compop, compval) in query[dpn].comparisons.items():
         if compop != '|=':
           raise MQLTypeError(
               query,
@@ -2828,7 +2828,7 @@ class HighQuery(object):
           query[dpn].comparisons[compop] = resolved_ids
 
           # just need the values for lojson
-          compval = resolved_ids.values()
+          compval = list(resolved_ids.values())
 
         low_json['@guid'] = compval
 
@@ -2900,12 +2900,12 @@ class HighQuery(object):
           value, comparison=None, explicit_type=explicit_type)
       low_json[':value'] = stype.coerce_value(value)
 
-    except MQLTypeError, e:
+    except MQLTypeError as e:
       e.set_query(query)
       raise
 
     if dpn in query and query[dpn].comparisons is not None:
-      for (compop, compval) in query[dpn].comparisons.iteritems():
+      for (compop, compval) in query[dpn].comparisons.items():
         # need to check this first since it comes with a list of values we're not expecting here.
         if compop == '|=':
           raise MQLTypeError(
@@ -3030,7 +3030,7 @@ class HighQuery(object):
 
   def handle_value_read_directives(self, query, varenv, low_json):
     if 'limit' in query:
-      if isinstance(query['limit'], (int, long)) and query['limit'] >= 0:
+      if isinstance(query['limit'], int) and query['limit'] >= 0:
         low_json[':pagesize'] = query['limit']
       else:
         raise MQLParseError(
@@ -3235,7 +3235,7 @@ class HighQuery(object):
 
     elif key == 'limit':
       # need to put @pagesize on the outermost part of the query, :pagesize elsewhere
-      if isinstance(value, (int, long)) and value >= 0:
+      if isinstance(value, int) and value >= 0:
         if direct_attachment:
           low_json['@pagesize'] = value
         else:
@@ -3424,7 +3424,7 @@ class HighQuery(object):
     filter_result = {}
     stype = query.stype
     property_name = stype.get_default_property_name()
-    for key, clause in query.iteritems():
+    for key, clause in query.items():
       is_list = isinstance(clause, list)
       if key == property_name:
         # XXX default property is always value (better not ever change this)
@@ -3595,7 +3595,7 @@ class HighQuery(object):
               mode=str(mode))
 
         filter_result = []
-        for i in xrange(len(query)):
+        for i in range(len(query)):
           filter_result.append(
               self.create_high_result(query[i], result[i], varenv, mode))
 
@@ -3620,7 +3620,7 @@ class HighQuery(object):
       elif query.stype.category == 'object':
         filter_result = {}
         query_property = query.stype.get_default_property_name()
-        for key, clause in query.iteritems():
+        for key, clause in query.items():
           if key == 'index':
             filter_result['index'] = result[':index']
           elif key == 'link':
@@ -3813,7 +3813,7 @@ class HighQuery(object):
           stype = query.stype
         else:
           stype = query.property.type
-        for k, v in query.iteritems():
+        for k, v in query.items():
           if k == '*':
             continue
           v2 = self.create_normalized_result(v, varenv)
@@ -3866,7 +3866,7 @@ class HighQuery(object):
             else:
               k2 = v.property.id
             k = update_key(k, k2)
-          if not rv.has_key(k):
+          if k not in rv:
             rv[k] = v2
           else:
             raise MQLParseError(
@@ -3915,12 +3915,12 @@ class HighQuery(object):
 
   def lookup_high_id_from_map(self, guid, mapping, varenv):
     # the mapping is id->guid, so we need to reverse it
-    for (map_id, map_guid) in mapping.iteritems():
+    for (map_id, map_guid) in mapping.items():
       if map_guid == guid:
         return map_id
 
     raise MQLInternalError(
-        None, 'Unknown id from |= list', guid=guid, list=mapping.keys())
+        None, 'Unknown id from |= list', guid=guid, list=list(mapping.keys()))
 
 
 def cmdline_main():
@@ -4013,7 +4013,7 @@ def cmdline_main():
     # XXX should eventually use unicode, for now utf8
     query = json.loads(query)
     if options.macro:
-      print options.macro
+      print(options.macro)
       macro = json.loads(options.macro)
 
   if macro:
@@ -4040,23 +4040,23 @@ def cmdline_main():
       result = op.ctx.high_querier.read(query, op.varenv)
 
     if options.cursor is not None:
-      print 'cursor=%s' % repr(op.varenv['cursor'])
+      print('cursor=%s' % repr(op.varenv['cursor']))
 
     if options.write_dateline:
-      print 'dateline=%s' % repr(op.varenv['dateline'])
+      print('dateline=%s' % repr(op.varenv['dateline']))
 
     if options.raw:
       pprint.pprint(result)
     else:
-      print json.struct2json(result, sort=True)
+      print(json.struct2json(result, sort=True))
 
-  except MQLError, e:
+  except MQLError as e:
     e.add_error_inside()
 
     if options.raw:
       pprint.pprint(e.error)
     else:
-      print json.struct2json(e.error, sort=True)
+      print(json.struct2json(e.error, sort=True))
 
 
 if __name__ == '__main__':

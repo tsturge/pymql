@@ -18,14 +18,14 @@
 # Nick -- I understand your point very well now...
 #
 
-from utils import valid_idname, valid_guid
-from error import MQLParseError, MQLInternalError
-from namespace import NameMap
+from .utils import valid_idname, valid_guid
+from .error import MQLParseError, MQLInternalError
+from .namespace import NameMap
 
 from pymql.error import EmptyResult
 from pymql.log import LOG
 
-import mid
+from . import mid
 
 
 class NamespaceFactory:
@@ -66,7 +66,7 @@ class NamespaceFactory:
     # doesn't have the property; then ids come from namespace keys alone.
     if self.best_hrid_guid is None:
       g = self.lookup_guid("/freebase/object_hints/best_hrid", varenv)
-      if isinstance(g, basestring) and g[0] == "#":
+      if isinstance(g, str) and g[0] == "#":
         self.best_hrid_guid = g
       else:
         LOG.warning("mql.lookup.preload",
@@ -75,7 +75,7 @@ class NamespaceFactory:
 
     if not self.forbidden_namespaces:
       self.forbidden_namespaces = \
-          self.lookup_guids(("/wikipedia/en",
+          list(self.lookup_guids(("/wikipedia/en",
                              "/wikipedia/en_id",
                              "/wikipedia/de",
                              "/user/metaweb/datasource",
@@ -84,7 +84,7 @@ class NamespaceFactory:
                              "/base/zxspectrum/wos",
                              "/base/ourairports/ourairports_id",
                              "/authority",
-                             "/source"),varenv).values()
+                             "/source"),varenv).values())
 
   # this is the only part of low JSON that needs to resolve names.
   def lookup_guid(self, name, varenv):
@@ -106,7 +106,7 @@ class NamespaceFactory:
     # we generate the actual graph query itself.
     retval = {}
     for name in id_list:
-      if isinstance(name, unicode):
+      if isinstance(name, str):
         name = name.encode("utf-8")
 
       if not isinstance(name, str):
@@ -278,7 +278,7 @@ class NamespaceFactory:
   def lookup_id(self, guid, varenv):
     # this function needs to have exactly the same semantics as
     # lookup_ids() (which now contains the "official" semantics)
-    if isinstance(guid, unicode):
+    if isinstance(guid, str):
       guid = guid.encode("utf-8")
 
     return self.lookup_ids([guid], varenv)[guid]
@@ -297,7 +297,7 @@ class NamespaceFactory:
     if not "asof" in varenv:
       # Step 1: maybe we already know.
       for guid in guid_list:
-        if isinstance(guid, unicode):
+        if isinstance(guid, str):
           guid = guid.encode("utf-8")
 
         if guid in self.guids:
@@ -313,7 +313,7 @@ class NamespaceFactory:
 
     else:
       for guid in guid_list:
-        if isinstance(guid, unicode):
+        if isinstance(guid, str):
           guid = guid.encode("utf-8")
 
         ask_list.add(guid)

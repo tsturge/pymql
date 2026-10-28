@@ -187,7 +187,7 @@ class GraphConnector(object):
        GraphConnectionError: If timeout_policies are incorrectly specified.
     """
 
-    for k, m in self.timeout_policies.iteritems():
+    for k, m in self.timeout_policies.items():
       if not isinstance(m, dict):
         raise GraphConnectionError('Policy map is specified incorrectly')
 
@@ -199,7 +199,7 @@ class GraphConnector(object):
     return self._default_policy
 
   def _set_default_policy(self, policy):
-    if isinstance(policy, basestring):
+    if isinstance(policy, str):
       assert policy in self.timeout_policies, ('Policy Name is invalid: %s' %
                                                policy)
       self._default_policy = policy
@@ -237,7 +237,7 @@ class GraphConnector(object):
   def _get_policy(self, policy=None):
     if policy is None:
       return self.timeout_policies[self.default_policy]
-    elif isinstance(policy, basestring):
+    elif isinstance(policy, str):
       return self.timeout_policies[policy]
     elif isinstance(policy, dict):
       return policy
@@ -281,7 +281,7 @@ class GraphConnector(object):
     # we always set a maximum graphd 'user time' in ms
     # value.  It represents work done by graphd.
     query_timeout_tu = varenv.get('query_timeout_tu')
-    if isinstance(query_timeout_tu, (int, long)):
+    if isinstance(query_timeout_tu, int):
       tu_max = query_timeout_tu
     else:
       tu_max = FLAGS.graphd_default_query_timeout_tu
@@ -445,7 +445,7 @@ class GraphConnector(object):
     request_cost['mql_dbtries'] = tries or 1
     request_cost['mql_dbreqs'] = 1
     LOG.debug('graphdrequest.cost %s', request_cost)
-    for k, v in request_cost.iteritems():
+    for k, v in request_cost.items():
       if k in ['mm', 'fm']:
         # These are high water marks. Don't sum them.
         self.totalcost[k] = max(v, self.totalcost.get(k))

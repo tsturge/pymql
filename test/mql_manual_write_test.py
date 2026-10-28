@@ -120,7 +120,7 @@ class MQLTest(mql_fixture.MQLTest):
     self.assertDictContainsSubset(partial_response,
                                   self.mql_result.result,
                                   msg='create duplicate note')
-    self.assertNotEquals(note1_id, note2_id, msg='new note, new id')
+    self.assertNotEqual(note1_id, note2_id, msg='new note, new id')
 
     query = """
     {
@@ -408,8 +408,8 @@ class MQLTest(mql_fixture.MQLTest):
     self.DoQuery(query, mqlwrite=True)
     cnote_id = self.mql_result.result[0]['id']
     gnote_id = self.mql_result.result[1]['id']
-    self.assertEquals(self.mql_result.result[0]['create'], 'created')
-    self.assertEquals(self.mql_result.result[1]['create'], 'created')
+    self.assertEqual(self.mql_result.result[0]['create'], 'created')
+    self.assertEqual(self.mql_result.result[1]['create'], 'created')
 
     query = """
       {

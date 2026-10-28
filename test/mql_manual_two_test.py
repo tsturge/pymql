@@ -1828,7 +1828,7 @@ class MQLTest(mql_fixture.MQLTest):
           "lang": "/lang/it",
           "type": "/type/text",
           "link": "/type/object/name",
-          "value": "La corsa pi\u00f9 pazza del mondo"
+          "value": "La corsa pi\\u00f9 pazza del mondo"
         }
       ]
     }
@@ -1895,7 +1895,7 @@ class MQLTest(mql_fixture.MQLTest):
               "id": "/lang/it"
             }
           },
-          "value": "La corsa pi\u00f9 pazza del mondo"
+          "value": "La corsa pi\\u00f9 pazza del mondo"
         }
       ]
     }

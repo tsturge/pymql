@@ -29,10 +29,10 @@ import copy
 import logging
 import time
 
-from mql import error as mql_error
-from mql.graph import TcpGraphConnector
-from mql.hijson import HighQuery
-from mql.lojson import LowQuery
+from .mql import error as mql_error
+from .mql.graph import TcpGraphConnector
+from .mql.hijson import HighQuery
+from .mql.lojson import LowQuery
 
 
 class InvalidGraphAddr(Exception):
@@ -57,11 +57,11 @@ class MQLService(object):
   def _fix_varenv(self, env):
     """Make a copy of self.varenv, update it with env."""
     dollared_env = dict([
-        ("$" + k, v) for k, v in env.items() if k in self.dollar_keys
+        ("$" + k, v) for k, v in list(env.items()) if k in self.dollar_keys
     ])
 
     not_dollared = dict([
-        (k, v) for k, v in env.items() if k not in self.dollar_keys
+        (k, v) for k, v in list(env.items()) if k not in self.dollar_keys
     ])
 
     if "as_of_time" in not_dollared:
@@ -191,7 +191,7 @@ class MQLService(object):
     r = self.high_querier.read(query, env)
 
     cost = self.get_cost()
-    logging.debug("pymql.read.end env: %s cost: %s", env, cost.items())
+    logging.debug("pymql.read.end env: %s cost: %s", env, list(cost.items()))
     result = self.MQLResult(r, cost, env.get("dateline"), env.get("cursor"))
     return result
 
@@ -252,7 +252,7 @@ class MQLService(object):
     logging.debug("pymql.write.start env: %s query: %s", env, query)
     r = self.high_querier.write(query, env)
     cost = self.get_cost()
-    logging.debug("pymql.write.end env: %s cost: %s", env, cost.items())
+    logging.debug("pymql.write.end env: %s cost: %s", env, list(cost.items()))
     result = self.MQLResult(r, cost, env.get("write_dateline"),
                             env.get("cursor"))
     return result

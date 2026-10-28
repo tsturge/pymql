@@ -15,7 +15,7 @@
 # Table mapping response codes to messages; entries have the
 # form {code: (shortmessage, longmessage)}.
 # See http://www.w3.org/hypertext/WWW/Protocols/HTTP/HTRESP.html
-from BaseHTTPServer import BaseHTTPRequestHandler
+from http.server import BaseHTTPRequestHandler
 import traceback
 from pymql.log import LOG
 
@@ -23,7 +23,7 @@ from pymql.log import LOG
 # HTTP error code messages
 # XXX: We really really need to move to py2.5
 def is_valid_HTTP_code(code):
-  return code in BaseHTTPRequestHandler.responses.keys()
+  return code in list(BaseHTTPRequestHandler.responses.keys())
 
 
 def get_HTTP_err(code):
@@ -70,7 +70,7 @@ class ParameterizedError(Exception):
     self.app_code = '%s' % '/'.join(codes[2:])
     self.messages = [self.gen_msgs(**kwds)]
 
-    if not kwds.has_key('error'):
+    if 'error' not in kwds:
       # don't extract the current frame (__init__)
       stack = traceback.extract_stack()[:-1]
       kwds['traceback'] = '\r\n'.join(traceback.format_list(stack))

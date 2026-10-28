@@ -12,14 +12,14 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-from error import MQLInternalError, MQLResultError, MQLTooManyValuesForUniqueQuery
-from utils import Missing, find_key_in_query
-from grquoting import quote
-from env import DeferredIdLookup, DeferredMidOfGuidLookup, DeferredMidsOfGuidLookup, quote_value, unquote_value, Guid
+from .error import MQLInternalError, MQLResultError, MQLTooManyValuesForUniqueQuery
+from .utils import Missing, find_key_in_query
+from .grquoting import quote
+from .env import DeferredIdLookup, DeferredMidOfGuidLookup, DeferredMidsOfGuidLookup, quote_value, unquote_value, Guid
 from pymql.log import LOG
 from collections import defaultdict
 
-import mid
+from . import mid
 
 
 class ReadQP(object):
@@ -268,7 +268,7 @@ class ReadQP(object):
         qpush('=(')
         qpush(' '.join(v))
         qpush(')')
-      elif isinstance(v, basestring):
+      elif isinstance(v, str):
         qpush('=')
         qpush(v)
     elif k == 'comparator':
@@ -311,7 +311,7 @@ class ReadQP(object):
         qpush(' ')
 
   def generate_vars(self, qpush):
-    for var, key in self.vars.iteritems():
+    for var, key in self.vars.items():
       qpush(var)
       qpush('=')
       qpush(key)
@@ -392,7 +392,7 @@ class ReadQP(object):
     return outer_result
 
   def _finish_bang_indexes(self):
-    for indexes in self.bang_indexes.itervalues():
+    for indexes in self.bang_indexes.values():
       for i, (index, high_result) in enumerate(sorted(indexes)):
         high_result['!index'] = i
     self.bang_indexes.clear()
@@ -462,7 +462,7 @@ class ReadQP(object):
         contents; like "id": xxx or "timestamp": xxx
         """
 
-    dz = dict(zip(self.result, result))
+    dz = dict(list(zip(self.result, result)))
 
     for item in self.implied:
       # don't generate results if we implied this thing.
@@ -611,7 +611,7 @@ class ReadQP(object):
     elif len(result) == 0:
       return None
     else:
-      dz = dict(zip(self.result, result[0]))
+      dz = dict(list(zip(self.result, result[0])))
       return unquote_value('float', dz['value'], False)
 
   def parse_result_count(self, result, varenv):
@@ -731,7 +731,7 @@ class ReadQP(object):
               category=qp.category)
 
       if self.final:
-        dz = dict(zip(self.result, sub_result))
+        dz = dict(list(zip(self.result, sub_result)))
         high_result = self.final.parse_result_final(dz, varenv)
       elif self.query.terminal and self.query.terminal in 'LVN':
         # a terminal, but not final...
@@ -787,7 +787,7 @@ class ReadQP(object):
       high_result = {}
       link = {}
 
-      dz = dict(zip(self.result, sub_result))
+      dz = dict(list(zip(self.result, sub_result)))
       # safety by default...
       value = stype.uncoerce_value(
           unquote_value(dz['datatype'], dz['value'],

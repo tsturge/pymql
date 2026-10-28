@@ -47,9 +47,9 @@ def IsSorted(part):
       if IsSorted(p) is False:
         return False
   elif isinstance(part, dict):
-    if sorted(part.keys()) != part.keys():
+    if sorted(part.keys()) != list(part.keys()):
       return False
-    for k, v in part.iteritems():
+    for k, v in part.items():
       if IsSorted(v) is False:
         return False
 

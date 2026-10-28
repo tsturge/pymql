@@ -30,10 +30,10 @@ class MQLTest(mql_fixture.MQLTest):
   def testUtf8(self):
     """Regression test for issue 4970606."""
 
-    query = u"""
+    query = """
       [{"name":"Beyonc\u00e9", "id": null}]
     """
-    exp_response = u"""
+    exp_response = """
     [
       {
         "id": "/en/beyonce",
@@ -144,12 +144,12 @@ class MQLTest(mql_fixture.MQLTest):
       i+=1
       self.env = {'cursor': cursor}
       self.MQLQuerier(query)
-      self.assertEquals(len(self.mql_result.result), 10)
+      self.assertEqual(len(self.mql_result.result), 10)
       # we should have a new cursor
-      self.assertNotEquals(cursor, self.mql_result.cursor)
+      self.assertNotEqual(cursor, self.mql_result.cursor)
       cursor = self.mql_result.cursor
       # it should be a cursor
-      self.assertNotEquals(cursor, False)
+      self.assertNotEqual(cursor, False)
 
   def testCursorComplex2(self):
     """random hash ordering cursor bug b/8323666 freeq."""
@@ -185,12 +185,12 @@ class MQLTest(mql_fixture.MQLTest):
       i+=1
       self.env = {'cursor': cursor, 'as_of_time': '2013-03-01'}
       self.MQLQuerier(query)
-      self.assertEquals(len(self.mql_result.result), 3)
+      self.assertEqual(len(self.mql_result.result), 3)
       # we should have a new cursor
-      self.assertNotEquals(cursor, self.mql_result.cursor)
+      self.assertNotEqual(cursor, self.mql_result.cursor)
       cursor = self.mql_result.cursor
       # it should be a cursor
-      self.assertNotEquals(cursor, False)
+      self.assertNotEqual(cursor, False)
 
 
 if __name__ == '__main__':

@@ -13,13 +13,13 @@
 # limitations under the License.
 
 #
-from grquoting import quote, unquote
+from .grquoting import quote, unquote
 
 from itertools import chain
-from utils import (valid_value_op, valid_timestamp_op, valid_timestamp,
+from .utils import (valid_value_op, valid_timestamp_op, valid_timestamp,
                    valid_history_op, valid_guid, ReadMode, WriteMode,
                    PrepareMode, CheckMode, Missing, ResultDict, incr_subseq)
-from error import (MQLResultError, MQLInternalError, MQLInternalParseError,
+from .error import (MQLResultError, MQLInternalError, MQLInternalParseError,
                    MQLValueAlreadyInUseError, MQLTooManyValuesForUniqueQuery)
 
 from pymql.log import LOG
@@ -85,11 +85,11 @@ class QueryPrimitive(object):
   # structure wisely.
   make_datatypes = {
       int: 'integer',
-      long: 'integer',
+      int: 'integer',
       str: 'string',
       float: 'float',
       bool: 'boolean',
-      unicode: 'string'
+      str: 'string'
   }
 
   # mapping from graphd => python types - for use with isinstance,
@@ -98,10 +98,10 @@ class QueryPrimitive(object):
   # note 'url' and 'bytestring' are in here, because graphd can
   # remember that
   check_datatypes = {
-      'integer': (int, long),
+      'integer': (int, int),
       'float': float,
       'url': str,
-      'string': basestring,
+      'string': str,
       'boolean': bool,
       'bytestring': str,
       'timestamp': str,
@@ -236,7 +236,7 @@ class QueryPrimitive(object):
       raise MQLInternalError(
           self.query, 'invalid prefix %(prefix)s', prefix=prefix)
 
-    for fullkey, v in qdict.iteritems():
+    for fullkey, v in qdict.items():
       if fullkey[0] != prefix:
         continue
 
@@ -303,7 +303,7 @@ class QueryPrimitive(object):
         self.datatype = self.make_datatypes[type(self.value)]
 
     # now check any constraints
-    for key, value in self.valueops.iteritems():
+    for key, value in self.valueops.items():
 
       # a special pass for ~="*". This is used in
       # hijson.py:build_low_json_value() to force value!=null, so we don't want it to force
@@ -806,12 +806,12 @@ class QueryPrimitive(object):
     for field in self.graphfields:
       graphq += self.generate_field(field, mode)
 
-    for var, val in self.vars.iteritems():
+    for var, val in self.vars.items():
       graphq += var + '=' + val + ' '
 
-    for op, val in chain(self.valueops.iteritems(),
-                         self.timestampops.iteritems(),
-                         self.history_ops.iteritems()):
+    for op, val in chain(iter(self.valueops.items()),
+                         iter(self.timestampops.items()),
+                         iter(self.history_ops.items())):
       graphq += self.generate_comparison_op(op, val, mode)
 
     if mode is PrepareMode:
@@ -916,7 +916,7 @@ class QueryPrimitive(object):
       # don't try to generate our parent (infinite recursion)
       if field == self.parent:
         return ''
-      elif isinstance(val, basestring):
+      elif isinstance(val, str):
         return field + '=' + val[1:] + ' '
       elif val is False:
         # doesn't matter where this is, it will fail the clause anyway
@@ -942,7 +942,7 @@ class QueryPrimitive(object):
             value=val)
 
     elif field == 'previous':
-      if isinstance(val, basestring):
+      if isinstance(val, str):
         return 'previous=' + val[1:] + ' '
       else:
         raise MQLInternalError(
@@ -953,7 +953,7 @@ class QueryPrimitive(object):
       # booleans are also instances of integer, so bool has to go first.
       if isinstance(val, bool):
         rv += quote(_boolean_name[val])
-      elif isinstance(val, (int, long, float)):
+      elif isinstance(val, (int, float)):
         rv += quote(str(val))
       elif isinstance(val, str):
         rv += quote(val)
@@ -992,7 +992,7 @@ class QueryPrimitive(object):
       elif field == 'sort':
         if isinstance(val, list) and len(val) > 0:
           return 'sort=(' + ' '.join(val) + ') '
-        elif isinstance(val, basestring):
+        elif isinstance(val, str):
           return 'sort=' + val + ' '
       elif field == 'live':
         if isinstance(val, bool):
@@ -1000,10 +1000,10 @@ class QueryPrimitive(object):
         elif val == 'dontcare':
           return 'live=dontcare '
       elif field in ('newest', 'oldest'):
-        if isinstance(val, (int, long, float)):
+        if isinstance(val, (int, float)):
           return field + '=' + str(val) + ' '
       elif field in ('previous', 'next'):
-        if isinstance(val, basestring):
+        if isinstance(val, str):
           return field + '=' + val[1:] + ' '
         else:
           return ''
@@ -1087,7 +1087,7 @@ class QueryPrimitive(object):
       raise MQLInternalParseError(
           self.query, 'Invalid history operator', key=k, value=v)
 
-    if not isinstance(v, (int, long)) or v < 0:
+    if not isinstance(v, int) or v < 0:
       raise MQLInternalParseError(
           self.query, 'Invalid history operator', key=k, value=v)
 
@@ -1097,7 +1097,7 @@ class QueryPrimitive(object):
     rv = op
     if isinstance(val, bool):
       rv += quote(_boolean_name[val])
-    elif isinstance(val, (int, long, float)):
+    elif isinstance(val, (int, float)):
       rv += quote(str(val))
     elif isinstance(val, str):
       rv += quote(val)
@@ -1153,7 +1153,7 @@ class QueryPrimitive(object):
         ('next', 'previous', 'default')):
       if v is None or v is False:
         return v
-      elif isinstance(v, basestring) and valid_guid(v):
+      elif isinstance(v, str) and valid_guid(v):
         return v
       elif (k in self.guid_field | self.pointers) and isinstance(
           v, list) and len(v) > 0:
@@ -1188,12 +1188,12 @@ class QueryPrimitive(object):
       raise MQLInternalParseError(
           self.query, 'unhandled flag value', key=k, value=v)
     elif k in ('pagesize', 'newest', 'oldest'):
-      if isinstance(v, (int, long)):
+      if isinstance(v, int):
         return v
       raise MQLInternalParseError(
           self.query, '%(key)s requires an int', key=k, value=v)
     elif k == 'index':
-      if v is None or isinstance(v, (int, long)):
+      if v is None or isinstance(v, int):
         return v
       raise MQLInternalParseError(
           self.query, '%(key)s requires an int or null', key=k, value=v)
@@ -1227,7 +1227,7 @@ class QueryPrimitive(object):
     elif k in self.writeinsns:
       if isinstance(v, bool):
         return v
-      elif isinstance(v, (int, long)):
+      elif isinstance(v, int):
         return not (v == 0)
 
       raise MQLInternalParseError(
@@ -1399,7 +1399,7 @@ class QueryPrimitive(object):
 
     n = len(self.result)
 
-    for i in xrange(n):
+    for i in range(n):
       # first make sure that we match what we expected to query here
       res = self.transform_result(self.result[i], result[i])
 
@@ -1410,7 +1410,7 @@ class QueryPrimitive(object):
       if self.result[i] == 'value':
         # do the conversion with the returned datatype. We know that we always ask for datatype when we ask for value
         # so this is OK.
-        datatype = dict(zip(self.result, result))['datatype']
+        datatype = dict(list(zip(self.result, result)))['datatype']
         res = self.primitive_result(self.datatype, res)
 
       if getattr(self, self.result[i], None) is not None:
@@ -1596,7 +1596,7 @@ class QueryPrimitive(object):
       order = None
 
       # ['guid', 'typeguid', 'contents']
-      for i in xrange(n):
+      for i in range(n):
         if self.result[i] == 'guid':
           guid = self.transform_result(self.result[i], existing[i])
 
@@ -1609,7 +1609,7 @@ class QueryPrimitive(object):
             guid=guid)
 
       m = len(self.ordered.result)
-      for i in xrange(m):
+      for i in range(m):
         if self.ordered.result[i] == 'value':
           res = self.transform_result(self.ordered.result[i], existing[n][0][i])
           order = self.primitive_result(self.ordered.datatype, res)
@@ -1761,9 +1761,9 @@ class QueryPrimitive(object):
     if result is not None:
       # yes, this is what it takes to get True out of a graph result. I need a better architecture...
       is_unique = self.primitive_result(
-          dict(zip(self.result, result))['datatype'],
+          dict(list(zip(self.result, result)))['datatype'],
           self.transform_result('value',
-                                dict(zip(self.result, result))['value']))
+                                dict(list(zip(self.result, result)))['value']))
 
     if not isinstance(is_unique, bool):
       raise MQLInternalError(
@@ -1809,7 +1809,7 @@ class QueryPrimitive(object):
   def attach_unique_result(self, reader, result):
     n = len(self.result)
 
-    for i in xrange(n):
+    for i in range(n):
       # first make sure that we match what we expected to query here
       res = self.transform_result(self.result[i], result[i])
 
@@ -1820,7 +1820,7 @@ class QueryPrimitive(object):
         # We can't use the datatype from orig in case we are (quite deliberately and properly)
         # attempting to change the datatype. So we need to inspect the returned datatype in
         # advance...
-        datatype = dict(zip(self.result, result))['datatype']
+        datatype = dict(list(zip(self.result, result)))['datatype']
         res = self.primitive_result(datatype, res)
 
       if getattr(self, self.result[i], None) is not None:
@@ -1927,7 +1927,7 @@ class QueryPrimitive(object):
     # this function returns the guid that is stored in field (left, right, tg, scope).
     # if this field points to another QP, that QP is inspected for either a guid
     # or the notation that it will be created.
-    if isinstance(getattr(self, field), basestring):
+    if isinstance(getattr(self, field), str):
       return getattr(self, field)
     elif getattr(self, field) is Missing:
       # all missing rights are the same.
