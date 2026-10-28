@@ -180,7 +180,7 @@ def strip_mock_query(q):
   k = re.sub(p, 'timestamp>2010-09-23T00:00:00.000001 ', k)
 
   h = hashlib.sha1()
-  h.update(k)
+  h.update(k.encode('utf-8', 'surrogateescape'))
   hsh = h.hexdigest()
   return k, hsh
 
@@ -241,18 +241,24 @@ def _serialize(item):
 
 
 def _split_constraint(items):
-  """Returns (terms, result template or None, subconstraints)."""
-  terms, result, subs = [], None, []
+  """Returns (terms, result template or None, whether bare, subconstraints).
+
+  A bare template, result=x rather than result=(x), lays its values out
+  unwrapped in its parent's reply.
+  """
+  terms, result, bare, subs = [], None, False, []
   for item in items:
     if isinstance(item, list):
       subs.append(item)
     elif isinstance(item, _Bind) and item.prefix == 'result=':
       result = item.items
+    elif isinstance(item, str) and item.startswith('result='):
+      result, bare = [item[len('result='):]], True
     elif isinstance(item, _Bind) and item.prefix.endswith('->'):
       subs.append(item)
     else:
       terms.append(item)
-  return terms, result, subs
+  return terms, result, bare, subs
 
 
 def _canon_list(items):
@@ -274,9 +280,11 @@ def _canon_sub(sub):
 
 
 def _canon_constraint(items):
-  terms, result, subs = _split_constraint(items)
+  terms, result, bare, subs = _split_constraint(items)
   parts = sorted(_canon_term(t) for t in terms)
-  if result is not None:
+  if bare:
+    parts.append('result=' + result[0])
+  elif result is not None:
     parts.append('result=' + _canon_list(result))
   parts.extend(sorted(_canon_sub(s) for s in subs))
   return '(' + ' '.join(parts) + ')'
@@ -299,14 +307,26 @@ class _ReplyMismatch(Exception):
   pass
 
 
-def _remap_constraint(rec, our, value, mode):
-  """Rearrange value, the reply to constraint rec, to fit constraint our."""
-  if not isinstance(value, list):
-    return value
-  _, rec_result, rec_subs = _split_constraint(rec)
-  _, our_result, our_subs = _split_constraint(our)
-  if len(rec_subs) != len(our_subs):
-    raise _ReplyMismatch('subconstraint count')
+def _width(items, mode):
+  """How many values a constraint contributes to its parent's reply."""
+  _, result, bare, subs = _split_constraint(items)
+  if mode == 'write' or not bare:
+    return 1
+  if result[0] == 'contents':
+    return sum(_width(_sub_items(s), mode) for s in subs)
+  return 1
+
+
+def _remap_constraint(rec, our, values, mode):
+  """Rearrange values, recorded for constraint rec, to fit constraint our.
+
+  values is the list of values the constraint contributes to its
+  parent's reply (see _width); the result is the same for our.
+  """
+  _, rec_result, rec_bare, rec_subs = _split_constraint(rec)
+  _, our_result, our_bare, our_subs = _split_constraint(our)
+  if len(rec_subs) != len(our_subs) or rec_bare != our_bare:
+    raise _ReplyMismatch('constraint shape')
 
   # pair each of our subconstraints with an equivalent recorded one
   unused = {}
@@ -318,27 +338,42 @@ def _remap_constraint(rec, our, value, mode):
     if not candidates:
       raise _ReplyMismatch('unpaired subconstraint')
     pairing.append(candidates.pop(0))
+  rec_items = [_sub_items(sub) for sub in rec_subs]
+  our_items = [_sub_items(sub) for sub in our_subs]
+  widths = [_width(items, mode) for items in rec_items]
 
   def remap_contents(rec_values):
-    return [
-        _remap_constraint(
-            _sub_items(rec_subs[i]), _sub_items(our_subs[j]), rec_values[i],
-            mode) for j, i in enumerate(pairing)
-    ]
+    """Our subconstraints' values, from the recorded ones."""
+    if len(rec_values) != sum(widths):
+      raise _ReplyMismatch('contents length')
+    per_sub, pos = [], 0
+    for w in widths:
+      per_sub.append(rec_values[pos:pos + w])
+      pos += w
+    out = []
+    for j, i in enumerate(pairing):
+      out.extend(_remap_constraint(rec_items[i], our_items[j], per_sub[i],
+                                   mode))
+    return out
 
   if mode == 'write':
-    if len(value) != 1 + len(rec_subs):
-      raise _ReplyMismatch('write reply length')
-    return value[:1] + remap_contents(value[1:])
+    # (guid sub1 sub2 ...)
+    value = values[0]
+    if not isinstance(value, list):
+      return values
+    return [value[:1] + remap_contents(value[1:])]
 
   if rec_result is None or our_result is None:
     # the default result doesn't include contents; layouts agree
-    return value
-  return _remap_template(rec_result, our_result, value, len(rec_subs),
-                         remap_contents)
+    return values
+  if rec_bare:
+    return _remap_template(rec_result, our_result, values, remap_contents)
+  if not isinstance(values[0], list):
+    return values
+  return [_remap_template(rec_result, our_result, values[0], remap_contents)]
 
 
-def _remap_template(rec_tmpl, our_tmpl, value, nsubs, remap_contents):
+def _remap_template(rec_tmpl, our_tmpl, value, remap_contents):
   if not isinstance(value, list):
     return value
   rec_names = [i for i in rec_tmpl if not isinstance(i, list)]
@@ -352,19 +387,21 @@ def _remap_template(rec_tmpl, our_tmpl, value, nsubs, remap_contents):
     raise _ReplyMismatch('result template shape')
 
   # Take the recorded value apart according to the recorded template.
-  # A nested list in a template means "one entry per match".
+  # A nested list in a template means "one entry per match", and
+  # "contents" stands for the values of all the subconstraints.
   fields, contents, matches = {}, None, None
   pos = 0
+  ncontents = len(value) - (len(rec_tmpl) - 1)
   for item in rec_tmpl:
     if isinstance(item, list):
       matches = [
-          _remap_template(item, our_inner[0], m, nsubs, remap_contents)
+          _remap_template(item, our_inner[0], m, remap_contents)
           for m in value[pos:]
       ]
       pos = len(value)
     elif item == 'contents':
-      contents = remap_contents(value[pos:pos + nsubs])
-      pos += nsubs
+      contents = remap_contents(value[pos:pos + ncontents])
+      pos += ncontents
     else:
       fields[item] = value[pos]
       pos += 1
@@ -383,38 +420,42 @@ def _remap_template(rec_tmpl, our_tmpl, value, nsubs, remap_contents):
   return out
 
 
+_REPLY_MODIFIER_RE = re.compile(r'^[a-z]+="')
+
+
 def remap_reply(rec_query, our_query, reply):
   """Rearrange reply, recorded for rec_query, to fit equivalent our_query."""
   rec_items = _parse(rec_query)
   our_items = _parse(our_query)
   reply_items = _parse(reply)
   if (not reply_items or reply_items[0] != 'ok' or
-      not isinstance(reply_items[-1], list) or
       not isinstance(rec_items[-1], list) or
       not isinstance(our_items[-1], list)):
     return reply
+  # ok cost="..." dateline="..." id="..." values...
+  start = 1
+  while (start < len(reply_items) and isinstance(reply_items[start], str) and
+         _REPLY_MODIFIER_RE.match(reply_items[start])):
+    start += 1
   mode = 'write' if rec_items[0] == 'write' else 'read'
   try:
-    payload = _remap_constraint(rec_items[-1], our_items[-1], reply_items[-1],
-                                mode)
+    values = _remap_constraint(rec_items[-1], our_items[-1],
+                               reply_items[start:], mode)
   except (_ReplyMismatch, IndexError, KeyError) as e:
     raise GraphMockException('cannot fit recorded reply to query (%s): %s' %
                              (e, our_query))
-  return ' '.join(_serialize(i) for i in reply_items[:-1] + [payload]) + '\n'
+  return ' '.join(_serialize(i) for i in reply_items[:start] + values) + '\n'
 
 
 _CANONICAL_INDEXES = {}
 
 
 def _to_str(s):
-  # The recordings hold graphd's raw utf-8 bytes, one character per byte,
-  # which yaml loads as unicode.
-  if isinstance(s, str):
-    return s
+  # The recordings hold graphd's raw utf-8 bytes, one character per byte.
   try:
-    return s.encode('latin-1')
+    return s.encode('latin-1').decode('utf-8', 'surrogateescape')
   except UnicodeEncodeError:
-    return s.encode('utf-8')
+    return s
 
 
 def _canonical_index(mockdata):
