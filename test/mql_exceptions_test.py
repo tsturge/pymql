@@ -1,3 +1,4 @@
+# -*- coding: utf-8 -*-
 # Copyright 2020 Google LLC
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -12,13 +13,11 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-# -*- coding: utf-8 -*-
 #
 """Making sure new exceptions are called properly."""
 
 __author__ = 'bobbyrullo@google.com (Bobby Rullo)'
 
-import google3
 import json
 from pymql.mql import error
 from pymql.test import mql_fixture

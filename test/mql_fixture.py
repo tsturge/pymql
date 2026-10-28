@@ -1,3 +1,4 @@
+# -*- coding: utf-8 -*-
 # Copyright 2020 Google LLC
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -12,7 +13,6 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-# -*- coding: utf-8 -*-
 """mql query language test fixture.
 
 Accomodates both simple query/expected tests using DoQuery
@@ -20,11 +20,14 @@ as well as more complex scenarios where different users, permissions
 and writes are involved.
 TODO(bneutra): Support user "login" and creation.
 
-TODO(bneutra): mockmode is broken due to python random hash
-ordering. default in config.cfg is --mockmode=nomock
+The default mockmode is 'replay', which answers graph queries from
+the recordings in data/*.yaml and needs no graphd. Queries are matched
+to recordings regardless of the order of their terms (see
+mql/graph/conn_mock.py), but any other change to query generation
+shows up as a missing mocked response.
 
 In mock 'record' mode, the tests talk to a live (but not production)
-graph. Fake, temporary users need to be created, those users
+graph at --graphd_addr. Fake, temporary users need to be created, those users
 perform actual writes. All graph responses are recorded for future
 test runs in mock mode.
 """
@@ -37,28 +40,29 @@ import os
 import sys
 import time
 
-import google3
-
 import pymql
 from pymql.mql import error
 from pymql.mql import graph
-import simplejson
+try:
+  import simplejson
+except ImportError:
+  import json as simplejson
 import yaml
 
-from google3.pyglib import flags
-from google3.pyglib import logging
-from google3.pyglib import resources
-from google3.testing.pybase import googletest
+from absl import flags
+from absl import logging
+from absl.testing import absltest
 
 FLAGS = flags.FLAGS
 
-# e.g. blade:freebase-graphd-sandbox (do not run tests against otg!)
-flags.DEFINE_string('graphd_addr', None, 'gslb or /bns name of graphd service')
+# e.g. localhost:8100 (do not run tests against otg!)
+flags.DEFINE_string('graphd_addr', None,
+                    'host:port of graphd, for record and nomock modes')
 flags.DEFINE_enum('mockmode', 'replay', ['replay', 'record', 'nomock'],
                   '"record" or "replay" or "nomock"')
 
 
-class MQLTest(googletest.TestCase):
+class MQLTest(absltest.TestCase):
   """test fixture for all mql tests.
 
   Attributes:
@@ -70,21 +74,20 @@ class MQLTest(googletest.TestCase):
 
   MOCK_DATA = None
   MOCKFILE_PATH = None
-  STUBBY_CONN = None
+  LIVE_CONN = None
   COSTS = {}
 
   @classmethod
-  def _GetStubbyConnector(cls):
-    if not cls.STUBBY_CONN:
+  def _GetLiveConnector(cls):
+    if not cls.LIVE_CONN:
       if not FLAGS.graphd_addr:
-        raise Exception('Must specified graphd_addr to use StubbyConnector')
+        raise Exception('Must specify graphd_addr to talk to a live graphd')
 
-      cls.STUBBY_CONN = graph.StubbyGraphConnector(
-          graphd_addr=FLAGS.graphd_addr
-          )
-      logging.info('init Stubby Connector')
+      host, port = FLAGS.graphd_addr.rsplit(':', 1)
+      cls.LIVE_CONN = graph.TcpGraphConnector(addrs=[(host, int(port))])
+      logging.info('init TCP Connector')
 
-    return cls.STUBBY_CONN
+    return cls.LIVE_CONN
 
   @staticmethod
   def SetMockPath(path):
@@ -94,7 +97,7 @@ class MQLTest(googletest.TestCase):
       MQLTest.MOCKFILE_PATH = PrependBase(path)
       if FLAGS.mockmode == 'replay':
         logging.info('load mockfile data %s', MQLTest.MOCKFILE_PATH)
-        MQLTest.MOCK_DATA = yaml.load(open(MQLTest.MOCKFILE_PATH).read())
+        MQLTest.MOCK_DATA = yaml.safe_load(open(MQLTest.MOCKFILE_PATH).read())
       elif FLAGS.mockmode == 'record':
         MQLTest.MOCK_DATA = {}
 
@@ -122,12 +125,16 @@ class MQLTest(googletest.TestCase):
       assert MQLTest.MOCK_DATA is not None, 'Must call SetMockPath()'
       logging.debug('mockmode: record')
       self.conn = graph.MockRecordConnector(MQLTest.MOCK_DATA,
-                                            self._GetStubbyConnector())
+                                            self._GetLiveConnector())
 
     elif FLAGS.mockmode == 'nomock':
-      self.conn = self._GetStubbyConnector()
+      self.conn = self._GetLiveConnector()
 
     self.mql_service = pymql.MQLService(connector=self.conn)
+    if FLAGS.mockmode == 'replay':
+      # The recordings predate /freebase/object_hints/best_hrid, so they
+      # have neither its lookup nor its clause in id queries.
+      self.mql_service.high_querier.querier.lookup.best_hrid_guid = False
     self.dateline = None
     self.env = {}
     self.mql_result = None
@@ -323,42 +330,22 @@ class MQLTest(googletest.TestCase):
 
 
 def PrependBase(rel_path):
-  """Returns the absolute path to the requested file resource.
+  """Returns the absolute path to a file in pymql/test.
 
   Args:
-    rel_path: string - Relative path to file
-  Returns:
-    string - Absolute path to resource.
-      If resource startswith("/) then resource is returned
-      else resource will have GetARootDirWithAllResources()
-      prepended to it.
+    rel_path: string - Path relative to the pymql/test directory
 
   Raises:
-    ValueError: When constructed path does not exist. Or is not absolute.
+    ValueError: When the file does not exist.
   """
-  rel_base = os.path.join(
-      FLAGS.test_srcdir, 'google3', 'third_party', 'py', 'pymql', 'test'
-  )
-  resource = rel_base + '/' + rel_path
-  if resource.startswith('/'):
-    abs_path = resource
-  else:
-    base = resources.ParExtractAllFiles()
-    if not base:
-      base = resources.GetARootDirWithAllResources()
-      abs_path = os.path.join(base, resource)
-
-  if os.path.isabs(abs_path) and os.path.exists(abs_path):
-    logging.debug('static file path found: %s', abs_path)
-  else:
+  abs_path = os.path.join(os.path.dirname(os.path.abspath(__file__)),
+                          rel_path)
+  if not os.path.exists(abs_path):
     raise ValueError(
-        'File in pymql/test does not exist. Please create it. %s',
-        rel_path
-    )
+        'File in pymql/test does not exist. Please create it. %s' % rel_path)
+  logging.debug('static file path found: %s', abs_path)
   return abs_path
 
 
 def main():
-  flagfile = PrependBase('config.cfg')
-  sys.argv.insert(1, '--flagfile=%s' % flagfile)
-  googletest.main()
+  absltest.main()

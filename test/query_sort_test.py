@@ -20,10 +20,9 @@ __author__ = 'bneutra@google.com (Brendan Neutra)'
 import collections
 import json
 
-import google3
 import pymql
 
-from google3.testing.pybase import googletest
+from absl.testing import absltest
 
 testdictpart = collections.OrderedDict({
     'propd': None,
@@ -57,7 +56,7 @@ def IsSorted(part):
   return True
 
 
-class PymqlSortTest(googletest.TestCase):
+class PymqlSortTest(absltest.TestCase):
 
   def testSorting(self):
     """basic sorting test."""
@@ -74,4 +73,4 @@ class PymqlSortTest(googletest.TestCase):
 
 
 if __name__ == '__main__':
-  googletest.main()
+  absltest.main()

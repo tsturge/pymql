@@ -25,7 +25,6 @@ import json
 import random
 import string
 
-import google3
 from pymql.mql import error
 from pymql.test import mql_fixture
 

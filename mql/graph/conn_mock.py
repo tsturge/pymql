@@ -123,32 +123,33 @@ class MockReplayConnector(GraphConnector):
   def transmit_query(self, q, policy, deadline, **kwargs):
     start_time = time.time()
     logging.debug('mocking query: %s', q)
-    k, hsh = strip_mock_query(q)
+    k, _ = strip_mock_query(q)
 
-    if hsh in self._mocked:
-      # we've seen this query before for this test
-      # so increment as we did in record mode
-      self._mocked[hsh] += 1
-      hsh = hsh + '_' + str(self._mocked[hsh])
-    else:
-      self._mocked[hsh] = 0
+    # Recordings are matched on the query's canonical form, because the
+    # order of terms in generated queries follows dict iteration order,
+    # which differs between the recording Python and this one.
+    canon = canonical_query(k)
+    n = self._mocked.get(canon, -1) + 1
+    self._mocked[canon] = n
 
-    if hsh not in self.mockdata:
-      msg = '%s NO MOCKED REPONSE for this query: %s' % (hsh, k)
+    recorded = _canonical_index(self.mockdata).get(canon, {}).get(n)
+    if recorded is None:
+      msg = 'NO MOCKED REPONSE for this query: %s' % k
       logging.error(msg)
       raise GraphMockException(msg)
 
-    m = self.mockdata[hsh]
-    msg = 'mock query found %s: %s' % (hsh, m[0])
-    logging.debug(msg)
-    logging.debug('mock response found: %s', m[1])
-    rg = re.search(' dateline\=\"(\S+)\" ', m[1])
+    rec_query, reply = recorded
+    logging.debug('mock query found: %s', rec_query)
+    logging.debug('mock response found: %s', reply)
+    if rec_query != k:
+      reply = remap_reply(rec_query, k, reply)
+    rg = re.search(' dateline\=\"(\S+)\" ', reply)
     self.dateline = None
     if rg:
       self.dateline = rg.groups()[0]
 
     reply_parser = ReplyParser()
-    reply_parser.parse_full_reply(m[1])
+    reply_parser.parse_full_reply(reply)
     ret = reply_parser.get_reply()
     dbtime = time.time() - start_time
     self.add_graph_costs(ret.cost, dbtime, tries=1)
@@ -163,6 +164,11 @@ def strip_mock_query(q):
   # note the query may be spread over multiple lines
   # but the directives should be on the first one.
   k = re.sub(' (id=\S+) ', ' ', q, count=1)
+  # the recordings predate the tu= cost limit, which doesn't change results
+  k = re.sub('^(\w+) cost="[^"]*" ', r'\1 cost="" ', k, count=1)
+  # and were made without passing write datelines on to later reads
+  k = re.sub('^(\w+ cost="") dateline="[^"]*" ', r'\1 dateline="" ', k,
+             count=1)
 
   # exception cases
   # timestamp stuff generated when creating mock responses is fine when it
@@ -177,3 +183,251 @@ def strip_mock_query(q):
   h.update(k)
   hsh = h.hexdigest()
   return k, hsh
+
+
+# Order-insensitive matching of graphd queries against recordings.
+#
+# A graphd query is a tree of constraints. Within a constraint the order of
+# terms and subconstraints doesn't change which primitives match, but it
+# does change the layout of the reply: result=(...) fields come back in the
+# order they were asked for, and "contents" expands to one value per
+# subconstraint, in query order. A write reply is (guid sub1 sub2 ...).
+# canonical_query() sorts all of that away, and remap_reply() rearranges a
+# recorded reply to match the layout of an equivalent query.
+
+_TOKEN_RE = re.compile(
+    r'"(?:\\.|[^"\\])*"|[()]|[^\s()"]+(?:"(?:\\.|[^"\\])*")?')
+
+
+class _Bind(object):
+  """A prefix bound to a parenthesized list: key=(...) or left->(...)."""
+
+  def __init__(self, prefix, items):
+    self.prefix = prefix
+    self.items = items
+
+
+def _parse(s):
+  stack = [[]]
+  depth = 1
+  for tok in _TOKEN_RE.findall(s):
+    if tok == '(':
+      stack.append([])
+      depth = max(depth, len(stack))
+    elif tok == ')':
+      if len(stack) == 1:
+        raise GraphMockException('unbalanced ) in %s' % s)
+      items = stack.pop()
+      parent = stack[-1]
+      if (parent and isinstance(parent[-1], str) and
+          (parent[-1].endswith('=') or parent[-1].endswith('->'))):
+        parent[-1] = _Bind(parent[-1], items)
+      else:
+        parent.append(items)
+    else:
+      stack[-1].append(tok)
+  if len(stack) != 1:
+    raise GraphMockException('unbalanced ( in %s' % s)
+  # the canonicalizing and remapping below recurse a few frames per level
+  if sys.getrecursionlimit() < 4 * depth + 100:
+    sys.setrecursionlimit(4 * depth + 100)
+  return stack[0]
+
+
+def _serialize(item):
+  if isinstance(item, list):
+    return '(' + ' '.join(_serialize(i) for i in item) + ')'
+  return item
+
+
+def _split_constraint(items):
+  """Returns (terms, result template or None, subconstraints)."""
+  terms, result, subs = [], None, []
+  for item in items:
+    if isinstance(item, list):
+      subs.append(item)
+    elif isinstance(item, _Bind) and item.prefix == 'result=':
+      result = item.items
+    elif isinstance(item, _Bind) and item.prefix.endswith('->'):
+      subs.append(item)
+    else:
+      terms.append(item)
+  return terms, result, subs
+
+
+def _canon_list(items):
+  return '(' + ' '.join(sorted(_canon_term(i) for i in items)) + ')'
+
+
+def _canon_term(item):
+  if isinstance(item, _Bind):
+    return item.prefix + _canon_list(item.items)
+  if isinstance(item, list):
+    return _canon_list(item)
+  return item
+
+
+def _canon_sub(sub):
+  if isinstance(sub, _Bind):
+    return sub.prefix + _canon_constraint(sub.items)
+  return _canon_constraint(sub)
+
+
+def _canon_constraint(items):
+  terms, result, subs = _split_constraint(items)
+  parts = sorted(_canon_term(t) for t in terms)
+  if result is not None:
+    parts.append('result=' + _canon_list(result))
+  parts.extend(sorted(_canon_sub(s) for s in subs))
+  return '(' + ' '.join(parts) + ')'
+
+
+def canonical_query(q):
+  """A form of the graphd query q that ignores the order of terms."""
+  items = _parse(q)
+  if items and isinstance(items[-1], list):
+    return ' '.join(sorted(_canon_term(i) for i in items[:-1]) +
+                    [_canon_constraint(items[-1])])
+  return ' '.join(_canon_term(i) for i in items)
+
+
+def _sub_items(sub):
+  return sub.items if isinstance(sub, _Bind) else sub
+
+
+class _ReplyMismatch(Exception):
+  pass
+
+
+def _remap_constraint(rec, our, value, mode):
+  """Rearrange value, the reply to constraint rec, to fit constraint our."""
+  if not isinstance(value, list):
+    return value
+  _, rec_result, rec_subs = _split_constraint(rec)
+  _, our_result, our_subs = _split_constraint(our)
+  if len(rec_subs) != len(our_subs):
+    raise _ReplyMismatch('subconstraint count')
+
+  # pair each of our subconstraints with an equivalent recorded one
+  unused = {}
+  for i, sub in enumerate(rec_subs):
+    unused.setdefault(_canon_sub(sub), []).append(i)
+  pairing = []
+  for sub in our_subs:
+    candidates = unused.get(_canon_sub(sub))
+    if not candidates:
+      raise _ReplyMismatch('unpaired subconstraint')
+    pairing.append(candidates.pop(0))
+
+  def remap_contents(rec_values):
+    return [
+        _remap_constraint(
+            _sub_items(rec_subs[i]), _sub_items(our_subs[j]), rec_values[i],
+            mode) for j, i in enumerate(pairing)
+    ]
+
+  if mode == 'write':
+    if len(value) != 1 + len(rec_subs):
+      raise _ReplyMismatch('write reply length')
+    return value[:1] + remap_contents(value[1:])
+
+  if rec_result is None or our_result is None:
+    # the default result doesn't include contents; layouts agree
+    return value
+  return _remap_template(rec_result, our_result, value, len(rec_subs),
+                         remap_contents)
+
+
+def _remap_template(rec_tmpl, our_tmpl, value, nsubs, remap_contents):
+  if not isinstance(value, list):
+    return value
+  rec_names = [i for i in rec_tmpl if not isinstance(i, list)]
+  if len(set(rec_names)) != len(rec_names):
+    if rec_tmpl == our_tmpl:
+      return value
+    raise _ReplyMismatch('repeated result field')
+  rec_inner = [i for i in rec_tmpl if isinstance(i, list)]
+  our_inner = [i for i in our_tmpl if isinstance(i, list)]
+  if len(rec_inner) != len(our_inner) or len(rec_inner) > 1:
+    raise _ReplyMismatch('result template shape')
+
+  # Take the recorded value apart according to the recorded template.
+  # A nested list in a template means "one entry per match".
+  fields, contents, matches = {}, None, None
+  pos = 0
+  for item in rec_tmpl:
+    if isinstance(item, list):
+      matches = [
+          _remap_template(item, our_inner[0], m, nsubs, remap_contents)
+          for m in value[pos:]
+      ]
+      pos = len(value)
+    elif item == 'contents':
+      contents = remap_contents(value[pos:pos + nsubs])
+      pos += nsubs
+    else:
+      fields[item] = value[pos]
+      pos += 1
+  if pos != len(value):
+    raise _ReplyMismatch('reply length')
+
+  # and put it back together according to ours
+  out = []
+  for item in our_tmpl:
+    if isinstance(item, list):
+      out.extend(matches)
+    elif item == 'contents':
+      out.extend(contents)
+    else:
+      out.append(fields[item])
+  return out
+
+
+def remap_reply(rec_query, our_query, reply):
+  """Rearrange reply, recorded for rec_query, to fit equivalent our_query."""
+  rec_items = _parse(rec_query)
+  our_items = _parse(our_query)
+  reply_items = _parse(reply)
+  if (not reply_items or reply_items[0] != 'ok' or
+      not isinstance(reply_items[-1], list) or
+      not isinstance(rec_items[-1], list) or
+      not isinstance(our_items[-1], list)):
+    return reply
+  mode = 'write' if rec_items[0] == 'write' else 'read'
+  try:
+    payload = _remap_constraint(rec_items[-1], our_items[-1], reply_items[-1],
+                                mode)
+  except (_ReplyMismatch, IndexError, KeyError) as e:
+    raise GraphMockException('cannot fit recorded reply to query (%s): %s' %
+                             (e, our_query))
+  return ' '.join(_serialize(i) for i in reply_items[:-1] + [payload]) + '\n'
+
+
+_CANONICAL_INDEXES = {}
+
+
+def _to_str(s):
+  # The recordings hold graphd's raw utf-8 bytes, one character per byte,
+  # which yaml loads as unicode.
+  if isinstance(s, str):
+    return s
+  try:
+    return s.encode('latin-1')
+  except UnicodeEncodeError:
+    return s.encode('utf-8')
+
+
+def _canonical_index(mockdata):
+  """Index recordings by canonical query, then by repeat count."""
+  index = _CANONICAL_INDEXES.get(id(mockdata))
+  if index is None:
+    index = {}
+    for key, entry in mockdata.items():
+      if not isinstance(entry, list):
+        continue  # a test's fuzz value
+      n = int(key.split('_')[1]) if '_' in key else 0
+      query, reply = [_to_str(s) for s in entry]
+      k, _ = strip_mock_query(query)
+      index.setdefault(canonical_query(k), {}).setdefault(n, (k, reply))
+    _CANONICAL_INDEXES[id(mockdata)] = index
+  return index

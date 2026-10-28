@@ -17,7 +17,6 @@
 
 __author__ = 'bneutra@google.com (Brendan Neutra)'
 
-import google3
 from pymql.test import mql_fixture
 
 

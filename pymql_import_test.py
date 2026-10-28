@@ -17,11 +17,10 @@
 
 __author__ = 'rtp@google.com (Tyler Pirtle)'
 
-import google3
-from google3.testing.pybase import googletest
+from absl.testing import absltest
 
 
-class PymqlImportTest(googletest.TestCase):
+class PymqlImportTest(absltest.TestCase):
 
   def canImport(self):
     import pymql
@@ -35,4 +34,4 @@ class PymqlImportTest(googletest.TestCase):
 
 
 if __name__ == '__main__':
-  googletest.main()
+  absltest.main()
