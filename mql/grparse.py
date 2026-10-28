@@ -198,6 +198,10 @@ class ReplyParser:
         push_state(curlist)
         curlist = []
       elif tok == ')':
+        if not stack:
+          raise MQLGraphError(
+              None, 'unbalanced ")" in graphd reply', reply=replystr,
+              tokens=token_list)
         sublist = curlist
         curlist = pop_state()
         curlist.append(sublist)
@@ -234,7 +238,9 @@ class ReplyParser:
     result.dateline = None
 
     if result.status == 'ok':
-      result += l.pop()
+      # Requests like restore or set reply with a bare "ok".
+      if l and isinstance(l[-1], list):
+        result += l.pop()
     elif result.status == 'error':
       result.errcode = l.pop(0)
       result.errmsg = unquote(l.pop())
