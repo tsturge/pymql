@@ -234,6 +234,67 @@ class LiveGraphdTest(absltest.TestCase):
             '/type/namespace/keys': [{'value': None, 'optional': True}],
         })['/type/namespace/keys'], [])
 
+  def testReturnKey(self):
+    self.create_namespace('/en', 'live_result')
+    for key in ['q', 'p']:
+      self.create_namespace('/en/live_result', key, name=key.upper())
+
+    query = [{
+        'type': '/type/namespace',
+        'key': {'namespace': '/en/live_result', 'value': None},
+        'name': None,
+        'sort': 'key.value',
+        'return': 'name',
+    }]
+    self.assertEqual(self.read(query), ['P', 'Q'])
+
+    # Nested, on a single clause, and on a link-valued property.
+    result = self.read({
+        'id': '/en/live_result',
+        '/type/namespace/keys': [{
+            'value': None,
+            'sort': 'value',
+            'return': 'value'
+        }],
+        'return': '/type/namespace/keys',
+    })
+    self.assertEqual(result, ['p', 'q'])
+
+    # The named key can be a clause with its own result.
+    result = self.read({
+        'id': '/en/live_result/p',
+        'key': {'namespace': None, 'value': None, 'return': 'namespace'},
+        'return': 'key',
+    })
+    self.assertEqual(result, '/en/live_result')
+
+    # "count" and "estimate-count" keep their old meaning.
+    result = self.read({
+        'id': '/en/live_result',
+        '/type/namespace/keys': {'value': None, 'return': 'count'},
+    })
+    self.assertEqual(result['/type/namespace/keys'], 2)
+
+    # A clause that matches nothing is still None.
+    self.assertIsNone(self.read({'id': '/en/no_such_thing', 'name': None,
+                                 'return': 'name'}))
+
+  def testReturnKeyErrors(self):
+    bad = [
+        # Not a key of the clause.
+        {'id': '/type/object/type', 'name': None, 'return': 'guid'},
+        # Not something the clause returns.
+        {'id': '/type/object/type', 'name': None, 'limit': 1,
+         'return': 'limit'},
+        {'id': '/type/object/type', 'name': None, 'return': ['name']},
+    ]
+    for query in bad:
+      with self.assertRaises(error.MQLParseError, msg=repr(query)):
+        self.read(query)
+
+    with self.assertRaises(error.MQLParseError):
+      self.write({'id': '/type/object/type', 'name': None, 'return': 'name'})
+
 
 if __name__ == '__main__':
   absltest.main()

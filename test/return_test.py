@@ -191,14 +191,14 @@ class MQLTest(mql_fixture.MQLTest):
     """
     self.DoQuery(query, exp_response=exp_response)
 
-  def testReturnIdFail(self):
-    """return id."""
+  def testReturnMissingKeyFail(self):
+    """return a key that isn't in the clause."""
 
     query = """
     {
       "/people/person/children": {
         "date_of_birth": null,
-        "return": "id",
+        "return": "name",
         "id": null
       },
       "id": "/en/bob_dylan"
@@ -206,7 +206,7 @@ class MQLTest(mql_fixture.MQLTest):
     """
     exc_response = (
         error.MQLParseError,
-	"'return' currently only supports 'count' and 'estimate-count'"
+	"'return' must be 'count', 'estimate-count' or a key returned by this clause"
     )
     self.DoQuery(query, exc_response=exc_response)
 

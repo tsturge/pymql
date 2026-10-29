@@ -220,6 +220,7 @@ class HighQuery(object):
                                                transaction_id)
       gresult = self.graph_read(gquery, varenv)
       high_result = self.create_mql_result(mquery, gresult, varenv)
+      high_result = self.apply_return_directives(mquery, high_result)
 
       LOG.debug('mql.result', '', mql=high_result)
 
@@ -1048,6 +1049,8 @@ class HighQuery(object):
 
         if key == 'sort':
           self.resolve_sort(query, varenv, mode)
+        elif key == 'return':
+          self.check_return_directive(query)
 
       elif key in self.write_directives:
         if mode not in (WriteMode, CheckMode):
@@ -2289,6 +2292,50 @@ class HighQuery(object):
         raise MQLInternalError(
             query, "Can't use a write directive in a %(mode)s", mode=str(mode))
 
+  def check_return_directive(self, query):
+    """ "return" is "count", "estimate-count", or a key of the clause.
+
+        "return": "key" returns the value of that key instead of the clause.
+        The key must be something the clause itself returns: a property,
+        "index" or "link".
+        """
+    value = query['return']
+    if value in ('count', 'estimate-count'):
+      return
+
+    if (not isinstance(value, str) or value not in query or value == '*' or
+        valid_comparison(value) or value in self.directives):
+      raise MQLParseError(
+          query,
+          "'return' must be 'count', 'estimate-count' or a key returned by this clause",
+          key='return',
+          value=value)
+
+  def apply_return_directives(self, query, result):
+    """ Collapses each clause with "return": "key" to that key's value.
+
+        Runs after the whole result has been built (and ids and mids
+        substituted), walking the query and result trees together.
+        """
+    if isinstance(query, list):
+      return self.apply_return_directives(element(query), result)
+
+    if isinstance(result, list):
+      return [self.apply_return_directives(query, elem) for elem in result]
+
+    if not isinstance(query, dict) or not isinstance(result, dict):
+      return result
+
+    for key, clause in query.items():
+      if key not in self.directives and key in result and isinstance(
+          clause, (dict, list)):
+        result[key] = self.apply_return_directives(clause, result[key])
+
+    if query.get('return') not in (None, 'count', 'estimate-count'):
+      return result[query['return']]
+
+    return result
+
   def add_read_directives(self, query, qp, varenv):
     if 'optional' in query:
       value = query['optional']
@@ -2316,18 +2363,14 @@ class HighQuery(object):
             key='limit',
             value=value)
 
-    if 'return' in query:
+    # "return": "key" is applied to the finished result, in
+    # apply_return_directives().
+    if query.get('return') in ('count', 'estimate-count'):
       value = query['return']
       if value == 'count':
         qp.return_count = True
-      elif value == 'estimate-count':
-        qp.return_estimate_count = True
       else:
-        raise MQLParseError(
-            query,
-            "'return' currently only supports 'count' and 'estimate-count'",
-            key='return',
-            value=value)
+        qp.return_estimate_count = True
 
       # remove the limit unless it is explicitly specified.
       if 'limit' not in query:
