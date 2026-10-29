@@ -340,6 +340,204 @@ class LiveGraphdTest(absltest.TestCase):
     self.assertIsNone(self.read({'id': '/en/no_such_thing', 'name': None,
                                  'return': 'name'}))
 
+  def assertReturns(self, query, project, expected):
+    """Checks query's "return" against the same query without it.
+
+    project(clause_result) builds what "return" should give for one result
+    of the outermost clause, from the result of the query without "return".
+    """
+    without = dict(query[0] if isinstance(query, list) else query)
+    del without['return']
+    plain = self.read([without] if isinstance(query, list) else without)
+    if isinstance(query, list):
+      projected = [project(r) for r in plain]
+    else:
+      projected = None if plain is None else project(plain)
+
+    result = self.read(query)
+    self.assertEqual(result, projected)
+    self.assertEqual(result, expected)
+
+  def testReturnPath(self):
+    # The properties of /type/object, sorted by name. Each property's
+    # schema and expected type are unique; so is each type's domain.
+    props = {
+        'type': '/type/property',
+        'name': None,
+        'schema': {'id': '/type/object', 'name': None},
+        'sort': 'name',
+        'limit': 2,
+    }
+
+    query = [dict(props, **{'return': 'schema.name'})]
+    self.assertReturns(query, lambda r: r['schema']['name'],
+                       ['Object', 'Object'])
+
+    # Paths in an array, two levels deep, mixed with plain keys.
+    query = [dict(props, **{
+        'expected_type': {'id': None, 'domain': {'name': None}},
+        'return': ['name', 'expected_type.id', 'expected_type.domain.name'],
+    })]
+    self.assertReturns(
+        query, lambda r: [r['name'], r['expected_type']['id'],
+                          r['expected_type']['domain']['name']],
+        [['attribution', '/type/attribution', 'Metaweb System Types'],
+         ['creator', '/type/user', 'Metaweb System Types']])
+
+    # Paths in an object, through full property ids.
+    query = [dict(props, **{
+        '/type/property/expected_type': {
+            'id': None,
+            '/type/type/domain': {'id': None}
+        },
+        'return': {
+            'prop': 'name',
+            'domain': '/type/property/expected_type./type/type/domain.id',
+        },
+    })]
+    self.assertReturns(
+        query, lambda r: {
+            'prop': r['name'],
+            'domain': r['/type/property/expected_type']
+                      ['/type/type/domain']['id'],
+        },
+        [{'prop': 'attribution', 'domain': '/type'},
+         {'prop': 'creator', 'domain': '/type'}])
+
+    # Through a link clause.
+    query = [dict(props, **{
+        'schema': {'id': '/type/object', 'link': {'timestamp': None}},
+        'return': 'schema.link.timestamp',
+    })]
+    result = self.read(query)
+    self.assertLen(result, 2)
+    for timestamp in result:
+      self.assertRegex(timestamp, r'^\d{4}-\d\d-\d\dT')
+    self.assertReturns(query, lambda r: r['schema']['link']['timestamp'],
+                       result)
+
+    # Into a text value.
+    query = {
+        'id': '/type/object',
+        'type': '/type/type',
+        'name': {'value': None, 'lang': None},
+        'return': ['name.value', 'name.lang'],
+    }
+    self.assertReturns(query, lambda r: [r['name']['value'],
+                                         r['name']['lang']],
+                       ['Object', '/lang/en'])
+
+    # The path can end at a clause whose own sub-queries have a return.
+    query = {
+        'id': '/type/object/name',
+        'type': '/type/property',
+        'schema': {
+            'id': None,
+            'properties': [{'name': None, 'sort': 'name', 'limit': 2,
+                            'return': 'name'}],
+        },
+        'return': 'schema.properties',
+    }
+    self.assertEqual(self.read(query), ['attribution', 'creator'])
+
+    # Inside a list clause, a path per element.
+    query = {
+        'id': '/type/object',
+        'type': '/type/type',
+        'properties': [{
+            'name': None,
+            'expected_type': {'id': None},
+            'sort': 'name',
+            'limit': 2,
+            'return': 'expected_type.id',
+        }],
+        'return': 'properties',
+    }
+    self.assertEqual(self.read(query),
+                     ['/type/attribution', '/type/user'])
+
+    # On data we wrote: each namespace's unique key.
+    self.create_namespace('/en', 'live_path')
+    for key in ['b', 'a']:
+      self.create_namespace('/en/live_path', key)
+    query = [{
+        'type': '/type/namespace',
+        'key': {'namespace': '/en/live_path', 'value': None},
+        'id': None,
+        'sort': 'key.value',
+        'return': ['id', 'key.value', 'key.namespace'],
+    }]
+    self.assertReturns(
+        query, lambda r: [r['id'], r['key']['value'], r['key']['namespace']],
+        [['/en/live_path/a', 'a', '/en/live_path'],
+         ['/en/live_path/b', 'b', '/en/live_path']])
+
+  def testReturnPathThroughMissingClause(self):
+    props = {
+        'type': '/type/property',
+        'name': None,
+        'schema': {'id': '/type/object'},
+        'sort': 'name',
+        'limit': 2,
+    }
+    # An optional unique clause that doesn't match gives None, at any depth.
+    query = [dict(props, **{
+        'expected_type': {
+            'id': None,
+            'optional': True,
+            'domain': {'name': 'no such domain'}
+        },
+        'return': ['name', 'expected_type.id', 'expected_type.domain.name'],
+    })]
+    self.assertEqual(self.read(query),
+                     [['attribution', None, None], ['creator', None, None]])
+
+    # So does a forbidden one.
+    query = [dict(props, **{
+        'expected_type': {'id': '/type/text', 'optional': 'forbidden'},
+        'return': 'expected_type.id',
+    })]
+    self.assertEqual(self.read(query), [None, None])
+
+  def testReturnPathErrors(self):
+    base = {
+        'type': '/type/property',
+        'name': None,
+        'limit': 1,
+    }
+    cases = [
+        ({'schema': [{'id': None}]}, 'schema.id',
+         "'schema' .* must be a unique sub-query"),
+        ({'schema': None}, 'schema.id', "'schema' .* not a value"),
+        ({'schema': '/type/object'}, 'schema.id', "'schema' .* not a value"),
+        ({'schema': {}}, 'schema.id', "'schema' .* not a value"),
+        ({'schema': {'id': None, 'return': 'id'}}, 'schema.id',
+         "'schema' .* has a 'return' of its own"),
+        ({'schema': {'id': None}}, 'schema.name',
+         "'name' .* not a key returned"),
+        ({'schema': {'id': None, '*': None}}, 'schema.name',
+         "'name' .* not a key returned"),
+        ({'schema': {'id': None}}, 'bogus.id', "'bogus' .* not a key"),
+        ({'schema': {'id': None}}, 'schema.', "'' .* not a key"),
+        ({'schema': {'id': None}}, '.schema', "'' .* not a key"),
+        ({'schema': {'id': None}}, 'schema..id', "'' .* not a key"),
+        ({'schema': {'id': None, 'limit': 1}}, 'schema.limit',
+         "'limit' .* not a key"),
+        ({'schema': {'id': None, 'name~=': '*'}}, 'schema.name~=',
+         "'name~=' .* not a key"),
+        ({'schema': {'id': None, 'name': None}}, 'schema.name.value',
+         "'name' .* not a value"),
+        ({'schema': {'id': None, 'count': None}}, 'schema.count',
+         "'count' .* not a key"),
+    ]
+    for extra, path, message in cases:
+      for ret in (path, [path], {'x': path}):
+        query = dict(base, **extra)
+        query['return'] = ret
+        with self.assertRaisesRegex(error.MQLParseError, message,
+                                    msg=repr(query)):
+          self.read(query)
+
   def testReturnKeyErrors(self):
     bad = [
         # Not a key of the clause.

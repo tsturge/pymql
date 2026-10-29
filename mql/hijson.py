@@ -2320,6 +2320,9 @@ class HighQuery(object):
         "return": {"new_key": "key", ...} returns an object holding the value
         of each key under its new name. The keys must be something the clause
         itself returns: a property, "index" or "link".
+
+        A key can also be a dotted path such as "film.name", which reaches
+        into unique sub-queries ("film" must be written as {...}, not [...]).
         """
     value = query['return']
     if value in ('count', 'estimate-count'):
@@ -2339,13 +2342,62 @@ class HighQuery(object):
       keys = [value]
 
     for k in keys:
-      if (not isinstance(k, str) or k not in query or k == '*' or
-          valid_comparison(k) or k in self.directives):
+      if isinstance(k, str) and '.' in k:
+        self.check_return_path(query, k)
+      elif not self.is_return_key(query, k):
         raise MQLParseError(
             query,
             "'return' must be 'count', 'estimate-count', a key returned by this clause, or an array or object of such keys",
             key='return',
             value=value)
+
+  def is_return_key(self, query, k):
+    return (isinstance(k, str) and k in query and k != '*' and
+            not valid_comparison(k) and k not in self.directives)
+
+  def check_return_path(self, query, path):
+    """ Checks a dotted "return" path such as "film.name".
+
+        Every part but the last must name a unique sub-query of the clause
+        before it, without a "return" of its own (which would already have
+        replaced it). The last part must be a key returned by its clause.
+        """
+    parts = path.split('.')
+    clause = query
+    for i, part in enumerate(parts):
+      if not self.is_return_key(clause, part):
+        raise MQLParseError(
+            query,
+            "'%(subkey)s' in 'return' path '%(path)s' is not a key returned by its clause",
+            key='return',
+            subkey=part,
+            path=path)
+      if i == len(parts) - 1:
+        break
+
+      sub = clause[part]
+      if isinstance(sub, list):
+        raise MQLParseError(
+            query,
+            "'%(subkey)s' in 'return' path '%(path)s' must be a unique sub-query, written as {...} rather than [...]",
+            key='return',
+            subkey=part,
+            path=path)
+      if not isinstance(sub, dict) or sub.terminal:
+        raise MQLParseError(
+            query,
+            "'%(subkey)s' in 'return' path '%(path)s' must be a sub-query, not a value",
+            key='return',
+            subkey=part,
+            path=path)
+      if 'return' in sub:
+        raise MQLParseError(
+            query,
+            "'%(subkey)s' in 'return' path '%(path)s' has a 'return' of its own",
+            key='return',
+            subkey=part,
+            path=path)
+      clause = sub
 
   def apply_return_directives(self, query, result):
     """ Replaces each clause with "return": "key" by that key's value,
@@ -2372,12 +2424,24 @@ class HighQuery(object):
 
     value = query.get('return')
     if isinstance(value, dict):
-      return {new_key: result[k] for new_key, k in value.items()}
+      return {
+          new_key: self.get_return_path(result, k)
+          for new_key, k in value.items()
+      }
     elif isinstance(value, list):
-      return [result[k] for k in value]
+      return [self.get_return_path(result, k) for k in value]
     elif value not in (None, 'count', 'estimate-count'):
-      return result[value]
+      return self.get_return_path(result, value)
 
+    return result
+
+  def get_return_path(self, result, path):
+    # check_return_path() made sure each part but the last is a unique
+    # sub-query, so its result is a dictionary, or None if it didn't match.
+    for part in path.split('.'):
+      if result is None:
+        return None
+      result = result[part]
     return result
 
   def add_read_directives(self, query, qp, varenv):
