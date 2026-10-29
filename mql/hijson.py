@@ -457,6 +457,10 @@ class HighQuery(object):
     elif isinstance(value, list):
       rv = QueryList()
       for val in value:
+        if key == 'return' and isinstance(val, (dict, list)):
+          # "return": ["key", ...]
+          raise MQLParseError(
+              None, "'return' array elements must be strings", value=val)
         rv.append(self.validate_directive(key, val))
       return rv
     elif isinstance(value, dict) and key == 'return':
@@ -2309,9 +2313,10 @@ class HighQuery(object):
 
   def check_return_directive(self, query):
     """ "return" is "count", "estimate-count", a key of the clause, or an
-        object whose values are keys of the clause.
+        array or object of keys of the clause.
 
         "return": "key" returns the value of that key instead of the clause.
+        "return": ["key", ...] returns an array of the keys' values.
         "return": {"new_key": "key", ...} returns an object holding the value
         of each key under its new name. The keys must be something the clause
         itself returns: a property, "index" or "link".
@@ -2325,6 +2330,11 @@ class HighQuery(object):
         raise MQLParseError(
             query, "'return' object must not be empty", key='return')
       keys = list(value.values())
+    elif isinstance(value, list):
+      if not value:
+        raise MQLParseError(
+            query, "'return' array must not be empty", key='return')
+      keys = value
     else:
       keys = [value]
 
@@ -2333,14 +2343,15 @@ class HighQuery(object):
           valid_comparison(k) or k in self.directives):
         raise MQLParseError(
             query,
-            "'return' must be 'count', 'estimate-count', a key returned by this clause, or an object whose values are such keys",
+            "'return' must be 'count', 'estimate-count', a key returned by this clause, or an array or object of such keys",
             key='return',
             value=value)
 
   def apply_return_directives(self, query, result):
-    """ Replaces each clause with "return": "key" by that key's value, and
-        each clause with "return": {"new_key": "key", ...} by an object of
-        the named values under their new names.
+    """ Replaces each clause with "return": "key" by that key's value,
+        each clause with "return": ["key", ...] by an array of the keys'
+        values, and each clause with "return": {"new_key": "key", ...} by an
+        object of the named values under their new names.
 
         Runs after the whole result has been built (and ids and mids
         substituted), walking the query and result trees together.
@@ -2362,6 +2373,8 @@ class HighQuery(object):
     value = query.get('return')
     if isinstance(value, dict):
       return {new_key: result[k] for new_key, k in value.items()}
+    elif isinstance(value, list):
+      return [result[k] for k in value]
     elif value not in (None, 'count', 'estimate-count'):
       return result[value]
 

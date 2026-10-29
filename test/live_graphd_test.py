@@ -305,6 +305,37 @@ class LiveGraphdTest(absltest.TestCase):
     self.assertEqual(result, {'keys': [{'k': 'p', 'again': 'p'},
                                        {'k': 'q', 'again': 'q'}]})
 
+    # An array returns the values in its order.
+    query = [{
+        'type': '/type/namespace',
+        'key': {'namespace': '/en/live_result', 'value': None},
+        'name': None,
+        'id': None,
+        'sort': 'key.value',
+        'return': ['id', 'name'],
+    }]
+    self.assertEqual(self.read(query), [['/en/live_result/p', 'P'],
+                                        ['/en/live_result/q', 'Q']])
+    query[0]['return'] = ['name']
+    self.assertEqual(self.read(query), [['P'], ['Q']])
+
+    # Arrays nest, inside objects too.
+    result = self.read({
+        'id': '/en/live_result',
+        'name': None,
+        '/type/namespace/keys': [{
+            'value': None,
+            'namespace': None,
+            'sort': 'value',
+            'return': ['value', 'namespace']
+        }],
+        'return': {'keys': '/type/namespace/keys', 'n': 'name'},
+    })
+    self.assertEqual(result, {
+        'keys': [['p', '/en/live_result/p'], ['q', '/en/live_result/q']],
+        'n': None,
+    })
+
     # A clause that matches nothing is still None.
     self.assertIsNone(self.read({'id': '/en/no_such_thing', 'name': None,
                                  'return': 'name'}))
@@ -316,7 +347,11 @@ class LiveGraphdTest(absltest.TestCase):
         # Not something the clause returns.
         {'id': '/type/object/type', 'name': None, 'limit': 1,
          'return': 'limit'},
-        {'id': '/type/object/type', 'name': None, 'return': ['name']},
+        {'id': '/type/object/type', 'name': None, 'return': []},
+        {'id': '/type/object/type', 'name': None,
+         'return': ['name', 'guid']},
+        {'id': '/type/object/type', 'name': None,
+         'return': ['name', ['name']]},
         {'id': '/type/object/type', 'name': None, 'return': {}},
         {'id': '/type/object/type', 'name': None, 'return': {'g': 'guid'}},
         {'id': '/type/object/type', 'name': None,

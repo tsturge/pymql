@@ -206,7 +206,7 @@ class MQLTest(mql_fixture.MQLTest):
     """
     exc_response = (
         error.MQLParseError,
-	"'return' must be 'count', 'estimate-count', a key returned by this clause, or an object whose values are such keys"
+	"'return' must be 'count', 'estimate-count', a key returned by this clause, or an array or object of such keys"
     )
     self.DoQuery(query, exc_response=exc_response)
 
