@@ -459,6 +459,21 @@ class HighQuery(object):
       for val in value:
         rv.append(self.validate_directive(key, val))
       return rv
+    elif isinstance(value, dict) and key == 'return':
+      # "return": {"new_key": "key", ...}
+      rv = {}
+      for new_key, val in value.items():
+        if not isinstance(new_key, str) or not new_key.isascii():
+          raise MQLParseError(
+              None, 'Keys must be ASCII strings', key=str(new_key))
+        if isinstance(val, (dict, list)):
+          raise MQLParseError(
+              None,
+              "'return' object values must be strings",
+              key=new_key,
+              value=val)
+        rv[new_key] = self.validate_directive(key, val)
+      return rv
     else:
       # try to raise a good error (got complaints on developers@ about these ones)
       raise MQLParseError(
@@ -2293,26 +2308,39 @@ class HighQuery(object):
             query, "Can't use a write directive in a %(mode)s", mode=str(mode))
 
   def check_return_directive(self, query):
-    """ "return" is "count", "estimate-count", or a key of the clause.
+    """ "return" is "count", "estimate-count", a key of the clause, or an
+        object whose values are keys of the clause.
 
         "return": "key" returns the value of that key instead of the clause.
-        The key must be something the clause itself returns: a property,
-        "index" or "link".
+        "return": {"new_key": "key", ...} returns an object holding the value
+        of each key under its new name. The keys must be something the clause
+        itself returns: a property, "index" or "link".
         """
     value = query['return']
     if value in ('count', 'estimate-count'):
       return
 
-    if (not isinstance(value, str) or value not in query or value == '*' or
-        valid_comparison(value) or value in self.directives):
-      raise MQLParseError(
-          query,
-          "'return' must be 'count', 'estimate-count' or a key returned by this clause",
-          key='return',
-          value=value)
+    if isinstance(value, dict):
+      if not value:
+        raise MQLParseError(
+            query, "'return' object must not be empty", key='return')
+      keys = list(value.values())
+    else:
+      keys = [value]
+
+    for k in keys:
+      if (not isinstance(k, str) or k not in query or k == '*' or
+          valid_comparison(k) or k in self.directives):
+        raise MQLParseError(
+            query,
+            "'return' must be 'count', 'estimate-count', a key returned by this clause, or an object whose values are such keys",
+            key='return',
+            value=value)
 
   def apply_return_directives(self, query, result):
-    """ Collapses each clause with "return": "key" to that key's value.
+    """ Replaces each clause with "return": "key" by that key's value, and
+        each clause with "return": {"new_key": "key", ...} by an object of
+        the named values under their new names.
 
         Runs after the whole result has been built (and ids and mids
         substituted), walking the query and result trees together.
@@ -2331,8 +2359,11 @@ class HighQuery(object):
           clause, (dict, list)):
         result[key] = self.apply_return_directives(clause, result[key])
 
-    if query.get('return') not in (None, 'count', 'estimate-count'):
-      return result[query['return']]
+    value = query.get('return')
+    if isinstance(value, dict):
+      return {new_key: result[k] for new_key, k in value.items()}
+    elif value not in (None, 'count', 'estimate-count'):
+      return result[value]
 
     return result
 

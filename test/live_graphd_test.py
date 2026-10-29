@@ -275,6 +275,36 @@ class LiveGraphdTest(absltest.TestCase):
     })
     self.assertEqual(result['/type/namespace/keys'], 2)
 
+    # An object renames the keys it lists, and drops the rest.
+    query = [{
+        'type': '/type/namespace',
+        'key': {'namespace': '/en/live_result', 'value': None},
+        'name': None,
+        'id': None,
+        'sort': 'key.value',
+        'return': {'the_name': 'name', 'the_type': 'type', 'key': 'key'},
+    }]
+    self.assertEqual(self.read(query), [
+        {'the_name': 'P', 'the_type': '/type/namespace',
+         'key': {'namespace': '/en/live_result', 'value': 'p'}},
+        {'the_name': 'Q', 'the_type': '/type/namespace',
+         'key': {'namespace': '/en/live_result', 'value': 'q'}},
+    ])
+
+    # Objects nest, and can name a key twice.
+    result = self.read({
+        'id': '/en/live_result',
+        'name': None,
+        '/type/namespace/keys': [{
+            'value': None,
+            'sort': 'value',
+            'return': {'k': 'value', 'again': 'value'}
+        }],
+        'return': {'keys': '/type/namespace/keys'},
+    })
+    self.assertEqual(result, {'keys': [{'k': 'p', 'again': 'p'},
+                                       {'k': 'q', 'again': 'q'}]})
+
     # A clause that matches nothing is still None.
     self.assertIsNone(self.read({'id': '/en/no_such_thing', 'name': None,
                                  'return': 'name'}))
@@ -287,6 +317,12 @@ class LiveGraphdTest(absltest.TestCase):
         {'id': '/type/object/type', 'name': None, 'limit': 1,
          'return': 'limit'},
         {'id': '/type/object/type', 'name': None, 'return': ['name']},
+        {'id': '/type/object/type', 'name': None, 'return': {}},
+        {'id': '/type/object/type', 'name': None, 'return': {'g': 'guid'}},
+        {'id': '/type/object/type', 'name': None,
+         'return': {'n': 'name', 'l': 'limit'}},
+        {'id': '/type/object/type', 'name': None,
+         'return': {'n': {'m': 'name'}}},
     ]
     for query in bad:
       with self.assertRaises(error.MQLParseError, msg=repr(query)):
@@ -294,6 +330,9 @@ class LiveGraphdTest(absltest.TestCase):
 
     with self.assertRaises(error.MQLParseError):
       self.write({'id': '/type/object/type', 'name': None, 'return': 'name'})
+    with self.assertRaises(error.MQLParseError):
+      self.write({'id': '/type/object/type', 'name': None,
+                  'return': {'n': 'name'}})
 
 
 if __name__ == '__main__':
