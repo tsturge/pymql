@@ -123,9 +123,31 @@ Keys that aren't properties (`HighQuery.read_directives`):
 | `"return": ["a", "b"]` | Return an array of those keys' values |
 | `"return": {"x": "a"}` | Return an object of them, renamed |
 | `"macro": "m"` | Merge in the keys of the clause `m` from the environment's `macro` dictionary (reads only) |
+| `"reach": {...}` | The objects reachable from this one by shortest paths (reads only; below) |
 
 `return` keys can be dotted paths, `"film.name"`, into unique
-subqueries. Writes add `create` and `connect` (below). `"index": null`
+subqueries.
+
+`reach` searches for shortest paths, with graphd's `<-path`. Its keys
+are a subquery on the objects reached, plus `step` (the property to
+follow, `"!P"` backwards, `step|=` for several, or a subquery with
+`"*"` marking the next object), `steps` (the distance, or `"steps<=":
+N`), `path` and `paths`:
+
+```json
+{"id": "/en/test/alice",
+ "reach": {"step": "/en/test/person/knows", "id": "/en/test/frank",
+           "steps": null, "path": [{"name": null}]}}
+```
+
+```json
+{"id": "/en/test/alice",
+ "reach": {"id": "/en/test/frank", "steps": 3,
+           "path": [{"name": "Alice"}, {"name": "Bob"}, {"name": "Dave"},
+                    {"name": "Frank"}]}}
+```
+
+See [the path search proposal](path-proposal.md), alternative A. Writes add `create` and `connect` (below). `"index": null`
 looks like a directive but is a result key: the position of a link in
 an ordered property.
 

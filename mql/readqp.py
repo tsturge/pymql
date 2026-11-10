@@ -74,6 +74,14 @@ class ReadQP(object):
     self.vars = {}
     # icky flag to note when we optimize away self.query
     self.final = None
+    # path search ("reach"): a 'path' QP is a <-path constraint, with the
+    # step template rooted at self.step. In a step, a root's alternatives
+    # are groups of its contents, and next_field links to "*".
+    self.step = None
+    self.path_comparisons = []
+    self.pathlimit = None
+    self.alternatives = None
+    self.next_field = None
     if category == 'node':
       self.make_node()
     elif category == 'link':
@@ -84,6 +92,9 @@ class ReadQP(object):
       self.make_index()
     elif category == 'attached':
       self.make_node()
+    elif category == 'path':
+      self.make_node()
+      self.pagesize = 100
     elif category == 'directlink':
       # a direct link may be to a value link or a real link
       self.make_directlink()
@@ -198,13 +209,33 @@ class ReadQP(object):
     else:
       qpush('(')
 
+    if self.step is not None:
+      qpush('step=')
+      self.step.generate_graph_query(qpush)
+      for key_op, v in self.path_comparisons:
+        qpush('%s%d ' % (key_op, v))
+      if self.pathlimit is not None:
+        qpush('pathlimit=%d ' % self.pathlimit)
+
     self.generate_fields(qpush)
     self.generate_comparisons(qpush)
     self.generate_vars(qpush)
     self.generate_result(qpush)
 
-    for child in self.contents:
-      child.generate_graph_query(qpush)
+    if self.alternatives:
+      for i, group in enumerate(self.alternatives):
+        if i:
+          qpush('| ')
+        qpush('{')
+        for child in group:
+          child.generate_graph_query(qpush)
+        qpush('} ')
+    else:
+      for child in self.contents:
+        child.generate_graph_query(qpush)
+
+    if self.next_field:
+      qpush('%s->(*) ' % self.next_field)
 
     qpush(') ')
 
@@ -404,6 +435,12 @@ class ReadQP(object):
     if self.implied:
       self.parse_result_implied_value(result, high_result, varenv)
 
+    if self.query.via_fields and 'reach_objects' in varenv:
+      # an object in a step's via, whose fields are read later
+      dz = dict(list(zip(self.result, result)))
+      varenv['reach_objects'].append(('#' + dz['guid'], high_result,
+                                      self.query.via_fields))
+
     n = len(self.result)
     for i, qp in enumerate(self.contents):
       if qp.return_count:
@@ -431,6 +468,8 @@ class ReadQP(object):
       elif qp.category == 'directlink':
         high_result[qp.query.key] = qp.parse_result_direct_link(
             result[n + i], varenv)
+      elif qp.category == 'path':
+        high_result[qp.query.key] = qp.parse_result_path(result[n + i], varenv)
       elif qp.category == 'constraint':
         # constraints are supressed
         pass
@@ -454,6 +493,104 @@ class ReadQP(object):
         insert_count('estimate-count', est)
 
     return high_result
+
+  def paths_result(self):
+    # a list of a match's shortest paths
+    if 'via' in self.query.reach_paths[0]:
+      return '(path via)'
+    return '(path)'
+
+  def parse_result_path(self, result, varenv):
+    """ The matches of a "reach" clause: each a node result, with the
+        steps, path and paths asked for beside it.
+        """
+    query = self.query
+    outer_result = []
+    for sub_result in result:
+      high_result = {}
+      self.parse_result_node(sub_result, high_result, varenv)
+      dz = dict(list(zip(self.result, sub_result)))
+
+      if query.reach_steps:
+        high_result['steps'] = int(dz['steps'])
+      if query.reach_path is not None:
+        high_result['path'] = self.parse_result_reach_path(
+            dz['path'], dz.get('via'), query.reach_path,
+            query.reach_path_fields, varenv)
+      if query.reach_paths == 'count':
+        high_result['paths'] = int(dz['path-count'])
+      elif query.reach_paths is not None:
+        template = query.reach_paths[0]
+        high_result['paths'] = [{
+            'path':
+                self.parse_result_reach_path(p[0], p[1] if len(p) > 1 else None,
+                                             template,
+                                             query.reach_paths_fields, varenv)
+        } for p in dz[self.paths_result()]]
+
+      outer_result.append(high_result)
+
+    return self.list_or_item(outer_result, varenv)
+
+  def parse_result_reach_path(self, guids, vias, template, fields, varenv):
+    """ A path: a result for each object on it, from the start to the
+        match. HighQuery.fill_reach_paths() reads their fields later.
+        """
+    path = []
+    for i, guid in enumerate(guids):
+      node = {}
+      if 'via' in template and i > 0:
+        node['via'] = self.parse_result_via(vias[i - 1], varenv)
+      self.query.reach_nodes.append(('#' + guid, node, fields))
+      path.append(node)
+    return path
+
+  def parse_result_via(self, via, varenv):
+    """ One step's via: graphd's reply to the step template read with its
+        root bound to the step's start and "*" to its end. Of a step's
+        alternatives, the one that matched; its other groups are "null".
+        """
+    root = self.step
+    if not via:
+      return None
+    match = via[0]
+    n = len(root.result)
+    contents = root.contents
+    slots = match[n:]
+    step = self.query.reach_alternatives[0]
+    if root.alternatives:
+      offset = 0
+      for i, group in enumerate(root.alternatives):
+        group_slots = slots[offset:offset + len(group)]
+        offset += len(group)
+        if any(s != 'null' for s in group_slots):
+          contents, slots = group, group_slots
+          step = self.query.reach_alternatives[i]
+          break
+
+    # A unique subquery in a step returns the first way the step can be
+    # taken; a list returns every way. parse_result_node() collects the
+    # objects whose fields are read later in reach_objects.
+    uniqueness = varenv.get('uniqueness_failure')
+    varenv['uniqueness_failure'] = 'first'
+    objects = varenv['reach_objects'] = []
+    saved = root.contents
+    root.contents = contents
+    try:
+      result = root.parse_result_node(match[:n] + slots, {}, varenv)
+    finally:
+      root.contents = saved
+      del varenv['reach_objects']
+      if uniqueness is None:
+        del varenv['uniqueness_failure']
+      else:
+        varenv['uniqueness_failure'] = uniqueness
+
+    if step.via_fields:
+      dz = dict(list(zip(root.result, match)))
+      objects.append(('#' + dz['guid'], result, step.via_fields))
+    self.query.reach_nodes.extend(objects)
+    return result
 
   def parse_result_implied_value(self, result, high_result, varenv):
     """
@@ -904,6 +1041,9 @@ class ReadQP(object):
       return result[0]
     elif len(result) == 0:
       return None
+    elif varenv.get('uniqueness_failure', None) == 'first':
+      # the first, quietly: see parse_result_via()
+      return result[0]
     elif varenv.get('uniqueness_failure', None) == 'soft':
       # this supresses the exception in favor of a warning message
       LOG.warning(

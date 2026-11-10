@@ -1,8 +1,9 @@
 # Path search in MQL: a proposal
 
-Status: a proposal, not implemented. It builds on graphd's `<-path`
+Status: a proposal. Alternative A is implemented (see "As implemented"
+under A; tests in `test/reach_test.py`). It builds on graphd's `<-path`
 constraint (graphd's `doc/path-proposal.md`), which is implemented: MQL
-would compile to it, and graphd needs nothing new. All searching and
+compiles to it, and graphd needs nothing new. All searching and
 filtering happens in graphd; pymql only writes the query and shapes
 the reply.
 
@@ -215,6 +216,40 @@ read (guid=<stonebraker> result=((contents))
 ```
 
 with the names of the path's nodes read as pymql reads any result's.
+
+### As implemented
+
+`mql/hijson.py` (`make_reach()` and the functions after it) and
+`mql/readqp.py` (the `path` category, `parse_result_path()`). What the
+implementation settled:
+
+- **Steps are chains in graphd.** Keys in a step that only return
+  values - `null`, `[]`, `{}`, optional subqueries - are left out of
+  graphd's step, because an optional subconstraint stops graphd walking
+  a chain through its indexes (Stonebraker to Knuth on dblp: minutes,
+  against 0.5 s). Each object in the step that had any returns its
+  guid in `via`, and the fields are read after the search. Constraints
+  (given values, required subqueries, comparisons) stay in the step:
+  they say which steps there are, and graphd checks them.
+- **The objects on a path** are read with one more MQL read for each
+  `reach` clause and node subquery, `"guid|="` every object on its
+  paths, and likewise for the objects in steps' `via`. A path's node
+  subquery is a `/type/object` clause, so a type's properties are
+  written in full there; short names in a step are looked up as in the
+  step. `"path": [{}]` returns ids.
+- **Short names in a step** are looked up on the type of the clause
+  around `reach` (`"step": "knows"` in a `/people/person` clause).
+- **`via`** is the step's result for that step: `"*"` comes back as
+  `"*"`, as any given value does. A unique subquery in a step returns
+  the first way the step can be taken, a list every way (a unique one
+  is not an error). With `step|=`, it is the first alternative that
+  matched, under its own keys.
+- **`return`** can name `steps`, `path` and `paths` when the clause
+  asks for them: `"return": ["name", "steps"]`.
+- **A `reach` clause constrains** the clause around it, as any
+  subquery does: no match, no result, unless `"optional": true`.
+- **Directives in a step** other than `return`, `count` and
+  `estimate-count` are passed to graphd; in the objects of a path, none.
 
 ## Alternative B: nested steps and nested results
 

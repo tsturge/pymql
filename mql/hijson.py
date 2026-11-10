@@ -28,7 +28,7 @@ from .utils import (QueryDict, QueryList, element, high_elements, ReadMode,
                    reserved_word, valid_guid, valid_key, valid_mid, Missing)
 from . import schema
 
-from .readqp import ReadQP
+from .readqp import ReadQP, FinalQP
 
 import pprint
 import traceback
@@ -352,6 +352,8 @@ class HighQuery(object):
 
   def create_mql_result(self, query, graph_result, varenv):
     high_result = element(query).node.parse_result_root(graph_result, varenv)
+    # before substitute_ids(), which copies the result
+    self.fill_reach_paths(query, varenv)
 
     varenv.lookup_manager.do_guid_to_mid_lookups()
     varenv.lookup_manager.do_id_lookups()
@@ -385,7 +387,10 @@ class HighQuery(object):
           # do we want to deep-copy lists of directives?
           rv[key] = self.validate_directive(key, query[key])
         else:
-          rv[key] = self.make_orig(query[key], varenv)
+          if self.is_reach_key(key):
+            rv[key] = self.make_reach(query[key], varenv)
+          else:
+            rv[key] = self.make_orig(query[key], varenv)
           if isinstance(rv[key], dict):
             rv[key].parent_clause = rv
             rv[key].key = key
@@ -624,6 +629,9 @@ class HighQuery(object):
 
     if query.property is not None:
       expected_type = query.property.getothertype(varenv)
+    elif query.default_stype is not None:
+      # a step's root: the object a step starts from
+      expected_type = query.default_stype
     else:
       # if we're totally unconstrained, at least we have generic_concept
       expected_type = self.schema_factory.get_or_add_type(
@@ -1056,6 +1064,7 @@ class HighQuery(object):
     # comparison operators we found into them....
     # This is an ugly way to do it in two passes...
     properties = []
+    reaches = []
     for key in sorted(query.keys()):
       if key in self.read_directives:
         # don't attempt to process directives here right now, just check they're not misused.
@@ -1151,6 +1160,15 @@ class HighQuery(object):
 
         properties.append(key)
 
+      elif self.is_reach_key(key):
+        if mode is not ReadMode:
+          raise MQLParseError(
+              query,
+              "Can't use 'reach' in a %(mode)s, only in a read",
+              key=key,
+              mode=str(mode))
+        reaches.append(key)
+
       elif valid_mql_key(key):
         # have to do properties in the second pass
         properties.append(key)
@@ -1177,8 +1195,10 @@ class HighQuery(object):
       else:
         raise MQLParseError(query, "Didn't understand key '%(key)s'", key=key)
 
-    # { "return": "count" } is OK, all others are errors
-    if len(properties) == 0 and 'return' not in query and \
+    # { "return": "count" } is OK, all others are errors. A "reach" clause
+    # may have nothing but its own keys: any object it reaches matches.
+    if len(properties) == 0 and not reaches and not query.is_reach and \
+           'return' not in query and \
            'count' not in query and 'estimate-count' not in query:
       raise MQLParseError(query,
                           'Clause must not be empty excluding directives')
@@ -1215,6 +1235,10 @@ class HighQuery(object):
         else:
           # we recurse on types and objects
           self.resolve_names_recurse(subq, varenv, mode)
+
+    for key in reaches:
+      for subq in high_elements(query[key], mode):
+        self.resolve_reach(query, subq, varenv, mode)
 
   def check_property_type(self, query, varenv, mode):
     # placeholder function to check things like
@@ -1274,6 +1298,9 @@ class HighQuery(object):
     """
         This is a non-root object
         """
+
+    if query.is_next:
+      return self.add_query_primitive_next(query, varenv, mode)
 
     parent = query.parent_clause
 
@@ -1530,6 +1557,9 @@ class HighQuery(object):
       elif valid_comparison(key):
         # this was handled earlier -- nothing to do in this phase
         pass
+      elif self.is_reach_key(key):
+        for item in high_elements(query[key], mode):
+          self.add_query_primitive_reach(item, varenv, mode)
       elif key in self.directives:
         if key in self.read_directives and mode is ReadMode:
           # we do this in add_read_directives()
@@ -2279,6 +2309,413 @@ class HighQuery(object):
       elif query.stype.id == '/type/key':
         node.comparisons.append(('typeguid=', self.has_key))
 
+  # Path search: the "reach" directive (doc/path-proposal.md, alternative A).
+  # A "reach" clause compiles to graphd's <-path constraint: the clause's
+  # own keys constrain the target, its step is a template whose "*" marks
+  # the next object, and steps, path and paths are graphd's result atoms.
+
+  reach_comparisons = {
+      'steps': 'steps=',
+      'steps<': 'steps<',
+      'steps<=': 'steps<=',
+      'steps>': 'steps>',
+      'steps>=': 'steps>=',
+  }
+
+  def is_reach_key(self, key):
+    """ "reach", or "reach" with a prefix ("a:reach"). """
+    key_match = valid_mql_key(key)
+    return (key_match is not None and key_match.group(1) is None and
+            key_match.group(3) == 'reach')
+
+  def make_reach(self, query, varenv):
+    """ Parses a "reach" clause: {...} or [{...}].
+
+        step (or step|=), steps, path and paths are taken out and kept on
+        the clause; what is left is an ordinary subquery on the target.
+        """
+    if isinstance(query, list):
+      if len(query) != 1 or not isinstance(query[0], dict):
+        raise MQLParseError(None, "'reach' must be {...} or [{...}]")
+      rv = QueryList()
+      clause = self.make_reach(query[0], varenv)
+      clause.list = rv
+      rv.append(clause)
+      return rv
+
+    if not isinstance(query, dict):
+      raise MQLParseError(
+          None, "'reach' must be {...} or [{...}]", value=str(query))
+
+    target = {}
+    step = None
+    comparisons = []
+    steps = False
+    path = None
+    paths = None
+    for key, value in query.items():
+      if key in ('step', 'step|='):
+        if step is not None:
+          raise MQLParseError(
+              None, "'reach' takes one of 'step' and 'step|='", key=key)
+        if key == 'step':
+          step = [value]
+        elif isinstance(value, list) and value:
+          step = list(value)
+        else:
+          raise MQLParseError(
+              None, "'step|=' must be a list of steps", key=key)
+        for alt in step:
+          if not isinstance(alt, (str, dict)):
+            raise MQLParseError(
+                None,
+                'A step must be a property or a subquery with "*" marking the next object',
+                key=key)
+      elif key == 'steps' and value is None:
+        steps = True
+      elif key in self.reach_comparisons:
+        if not isinstance(value, int) or isinstance(value, bool) or value < 0:
+          raise MQLParseError(
+              None,
+              "'%(key)s' must be a non-negative integer",
+              key=key,
+              value=value)
+        comparisons.append((self.reach_comparisons[key], value))
+      elif key == 'path':
+        path = self.check_reach_path(key, value)
+      elif key == 'paths':
+        paths = self.check_reach_paths(value)
+      else:
+        target[key] = value
+
+    if step is None:
+      raise MQLParseError(None, "'reach' needs a 'step'")
+
+    rv = self.make_orig(target, varenv)
+    if not target:
+      rv.terminal = None
+    rv.original_query = query
+    rv.is_reach = True
+    rv.reach_step = step
+    rv.reach_comparisons = comparisons
+    rv.reach_steps = steps
+    rv.reach_path = path
+    rv.reach_paths = paths
+    if path is not None:
+      rv.reach_path_fields = self.reach_path_fields(path)
+    if paths not in (None, 'count'):
+      rv.reach_paths_fields = self.reach_path_fields(paths[0])
+    rv.reach_results = [
+        k for k, v in (('steps', steps), ('path', path), ('paths', paths)) if v
+    ]
+    # (guid, result, fields) for each object on the paths returned, and in
+    # their steps, whose fields fill_reach_paths() reads
+    rv.reach_nodes = []
+    return rv
+
+  def reach_path_fields(self, template):
+    """ The fields to read for each object on a path, as (result key,
+        query key, value): the node subquery, but for "via". [{}] is ids.
+        """
+    if not template:
+      return [('id', 'id', None)]
+    return [(k, k, v) for k, v in template.items() if k != 'via']
+
+  def check_reach_path(self, key, value):
+    """ "path": [{...}], a subquery for each object on the path. """
+    if not (isinstance(value, list) and len(value) == 1 and
+            isinstance(value[0], dict)):
+      raise MQLParseError(
+          None,
+          "'%(key)s' must be [{...}], a subquery for each object on the path",
+          key=key)
+    template = value[0]
+    for k, v in template.items():
+      if k == 'via':
+        if v is not None:
+          raise MQLParseError(None, "'via' must be null", key=k)
+      elif k in self.directives or self.is_reach_key(k):
+        raise MQLParseError(
+            None, "Can't use '%(key)s' in the objects on a path", key=k)
+    return template
+
+  def check_reach_paths(self, value):
+    """ "paths": [{"path": [{...}], "limit": N}] or {"return": "count"}. """
+    if value == {'return': 'count'}:
+      return 'count'
+    if (isinstance(value, list) and len(value) == 1 and
+        isinstance(value[0], dict) and 'path' in value[0] and
+        set(value[0]) <= set(['path', 'limit'])):
+      limit = value[0].get('limit', 100)
+      if not isinstance(limit, int) or isinstance(limit, bool) or limit < 1:
+        raise MQLParseError(
+            None, "'limit' in 'paths' must be a positive integer", value=limit)
+      return (self.check_reach_path('path', value[0]['path']), limit)
+    raise MQLParseError(
+        None,
+        '\'paths\' must be [{"path": [{...}], "limit": N}] or {"return": "count"}')
+
+  def resolve_reach(self, parent, clause, varenv, mode):
+    if parent.stype.category != 'object':
+      raise MQLParseError(
+          parent,
+          "Can't use 'reach' in %(type)s, only in an object",
+          key=clause.key,
+          type=parent.stype.id)
+
+    # the target is an ordinary subquery
+    self.resolve_names_recurse(clause, varenv, mode)
+
+    clause.reach_alternatives = [
+        self.resolve_reach_step(parent, clause, alt, varenv, mode)
+        for alt in clause.reach_step
+    ]
+
+  def resolve_reach_step(self, parent, clause, alt, varenv, mode):
+    """ A step: "P" or "!P" (a link either way), or a subquery rooted at
+        the object a step starts from, with "*" marking the next object.
+        """
+    if isinstance(alt, str):
+      if not valid_mql_key(alt):
+        raise MQLParseError(
+            clause, '%(step)s is not a valid property', key='step', step=alt)
+      alt = {alt: '*'}
+
+    step = self.make_orig(alt, varenv)
+    if step.terminal:
+      raise MQLParseError(
+          clause, 'A step must name a property to follow', key='step')
+    step.key = 'step'
+    step.default_stype = parent.stype
+
+    nexts = []
+    self.find_reach_next(clause, step, nexts)
+    if len(nexts) != 1:
+      raise MQLParseError(
+          clause,
+          'A step must have exactly one "*", marking the next object',
+          key='step')
+
+    self.resolve_names_recurse(step, varenv, mode)
+
+    if nexts[0].stype.category != 'object':
+      raise MQLParseError(
+          clause,
+          '"*" must be the value of a property whose values are objects',
+          key='step',
+          property=nexts[0].property.id)
+
+    self.strip_reach_step(step)
+    return step
+
+  def strip_reach_step(self, query):
+    """ Takes the fields that only return values out of each object in a
+        step, to be read later (fill_reach_paths()).
+
+        graphd walks a step that is a chain - each constraint with one
+        subconstraint, all mandatory - directly through its indexes; an
+        optional subconstraint, such as a name, makes it walk the slow way.
+        Fields that only return values ("name": null, [], {}, optional
+        subqueries) don't change which steps there are, so they are left
+        out of graphd's step; each object with any returns its guid.
+        """
+    fields = []
+    for key in list(query.keys()):
+      if key in self.directives or not valid_mql_key(key):
+        continue
+      sub = query[key]
+      elems = high_elements(sub, ReadMode)
+      if all(self.only_returns(elem) for elem in elems):
+        fields.append((key, self.qualified_key(key, element(sub)),
+                       query.original_query[key]))
+        del query[key]
+      else:
+        for elem in elems:
+          if not elem.terminal:
+            self.strip_reach_step(elem)
+
+    if fields:
+      query.via_fields = fields
+
+  def only_returns(self, query):
+    """ Does a clause only return values, never ruling a match out? """
+    if query.terminal:
+      return (query.terminal in 'NLD' and query.comparisons is None and
+              query.sort_var is None)
+    return (query.get('optional') in (True, 'optional') and
+            not self.has_reach_next(query))
+
+  def has_reach_next(self, query):
+    for key, sub in query.items():
+      if key in self.directives:
+        continue
+      for elem in (sub if isinstance(sub, list) else [sub]):
+        if isinstance(elem, dict) and (elem.is_next or
+                                       (not elem.terminal and
+                                        self.has_reach_next(elem))):
+          return True
+    return False
+
+  def qualified_key(self, key, query):
+    """ The key with a short property name replaced by the property's id,
+        for reading it outside the clause it was written in.
+        """
+    key_match = valid_mql_key(key)
+    if '/' in key_match.group(3):
+      return key
+    prefix = key_match.group(2)
+    return (prefix + ':' if prefix else '') + query.property.id
+
+  def find_reach_next(self, clause, query, nexts):
+    for key, sub in query.items():
+      if key in self.directives:
+        if key in ('return', 'count', 'estimate-count'):
+          raise MQLParseError(
+              clause,
+              "Can't use '%(subkey)s' in a step",
+              key='step',
+              subkey=key)
+        continue
+      if self.is_reach_key(key):
+        raise MQLParseError(
+            clause, "Can't use 'reach' inside a step", key='step')
+      for elem in (sub if isinstance(sub, list) else [sub]):
+        if not isinstance(elem, dict):
+          continue
+        if elem.terminal == 'V' and elem.value == '*':
+          if elem.list is not None:
+            raise MQLParseError(
+                clause, '"*" can\'t be in a list', key='step', subkey=key)
+          elem.is_next = True
+          nexts.append(elem)
+        elif not elem.terminal:
+          self.find_reach_next(clause, elem, nexts)
+
+  def add_query_primitive_reach(self, query, varenv, mode):
+    """ A "reach" clause: a <-path constraint on the parent's node. """
+    parent = query.parent_clause
+
+    query.link = Missing
+    query.node = ReadQP(query, 'path')
+    node = query.node
+    node.step = self.add_query_primitive_step(query, varenv, mode)
+    node.path_comparisons = query.reach_comparisons
+
+    if query.reach_steps:
+      node.add_result('steps')
+    if query.reach_path is not None:
+      node.add_result('path')
+      if 'via' in query.reach_path:
+        node.add_result('via')
+    if query.reach_paths == 'count':
+      node.add_result('path-count')
+    elif query.reach_paths is not None:
+      template, node.pathlimit = query.reach_paths
+      node.add_result(node.paths_result())
+
+    parent.node.add_contents(node, 'path', False)
+    self.add_read_directives(query, node, varenv)
+    self.add_query_primitive_recurse(query, varenv, mode)
+
+  def add_query_primitive_step(self, query, varenv, mode):
+    """ The step template: one root, the object a step starts from, with
+        each alternative's constraints in a group of its own.
+        """
+    alternatives = query.reach_alternatives
+    # the alternatives share the root; parse_result_via() reads the fields
+    # of the one that matched
+    root = ReadQP(QueryDict(), 'node')
+    groups = []
+    for step in alternatives:
+      step.node = root
+      start = len(root.contents)
+      self.add_query_primitive_recurse(step, varenv, mode)
+      groups.append(root.contents[start:])
+      self.add_reach_guid_results(step)
+      if step.via_fields:
+        root.add_result('guid')
+
+    if len(groups) > 1:
+      root.alternatives = groups
+    return root
+
+  def add_reach_guid_results(self, query):
+    # each object in a step whose fields are read later returns its guid
+    for key, sub in query.items():
+      if key in self.directives:
+        continue
+      for elem in (sub if isinstance(sub, list) else [sub]):
+        if isinstance(elem, dict) and not elem.terminal and elem.node:
+          if elem.via_fields:
+            elem.node.add_result('guid')
+          self.add_reach_guid_results(elem)
+
+  def add_query_primitive_next(self, query, varenv, mode):
+    """ The link to "*" in a step: right->(*), or left->(*) for a reverse
+        property. It returns "*", as a given value returns itself.
+        """
+    query.node = None
+    query.link = ReadQP(query, 'link')
+    query.link.pagesize = 1
+    query.link.final = FinalQP(query, query.property, None)
+    query.link.next_field = query.link.final.field
+    query.link.set_property(query.property, query.parent_clause.node, None)
+
+  def reach_clauses(self, query):
+    if isinstance(query, list):
+      for elem in query:
+        for clause in self.reach_clauses(elem):
+          yield clause
+    elif isinstance(query, dict) and not query.terminal:
+      if query.is_reach:
+        yield query
+      for key, sub in query.items():
+        if key not in self.directives:
+          for clause in self.reach_clauses(sub):
+            yield clause
+
+  def fill_reach_paths(self, query, varenv):
+    """ Reads the fields of the objects on the paths returned.
+
+        graphd returns a path as guids; the fields each node subquery asks
+        for come from one more read for each "reach" clause and subquery,
+        of every object on its paths.
+        """
+    for clause in self.reach_clauses(query):
+      groups = {}
+      for guid, result, fields in clause.reach_nodes:
+        groups.setdefault(id(fields), (fields, []))[1].append((guid, result))
+      for fields, nodes in groups.values():
+        self.fill_reach_nodes(fields, nodes, varenv)
+
+  def fill_reach_nodes(self, fields, nodes, varenv):
+    if not fields:
+      return
+
+    guids = sorted(set(guid for guid, result in nodes))
+    query = dict((query_key, value) for key, query_key, value in fields)
+    query['guid|='] = guids
+    query['guid'] = None
+    query['limit'] = len(guids)
+
+    sub_varenv = Varenv(
+        dict((k, v) for k, v in varenv.items() if k != 'cursor'),
+        self.querier.lookup)
+    mquery, gquery = self.create_graph_query([query], sub_varenv,
+                                             sub_varenv.get('tid'))
+    gresult = self.graph_read(gquery, sub_varenv)
+    found = self.create_mql_result(mquery, gresult, sub_varenv)
+    found = self.apply_return_directives(mquery, found)
+    by_guid = dict((r['guid'], r) for r in found)
+
+    for guid, result in nodes:
+      r = by_guid.get(guid, {})
+      via = result.pop('via', Missing)
+      for key, query_key, value in fields:
+        result[key] = r.get(query_key)
+      if via is not Missing:
+        result['via'] = via
+
   def get_optional_status(self, query):
     value = False
     if 'optional' in query:
@@ -2352,6 +2789,8 @@ class HighQuery(object):
             value=value)
 
   def is_return_key(self, query, k):
+    if isinstance(k, str) and k in query.reach_results:
+      return True
     return (isinstance(k, str) and k in query and k != '*' and
             not valid_comparison(k) and k not in self.directives)
 

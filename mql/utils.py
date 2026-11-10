@@ -63,6 +63,11 @@ class QueryDict(OrderedDict):
   sort_var = None  # hijson-only - sorts on this node
   sort = None  #
   alternatives = None  # hijson-only - list of value alternatives for |= operator
+  is_reach = False  # hijson-only - a "reach" clause (path search)
+  is_next = False  # hijson-only - the "*" marking the next object in a step
+  default_stype = None  # hijson-only - the type of a clause with no property
+  reach_results = ()  # hijson-only - the reserved keys a "reach" clause returns
+  via_fields = None  # hijson-only - fields of an object in a step, read later
 
   disconnected = False  # lojson-only - no matching query clause
 

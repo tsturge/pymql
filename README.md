@@ -80,7 +80,8 @@ There are three kinds of test in `test/`:
   reply parser), `grquoting_test.py`, `keyquote_test.py`, `mid_codec_test.py`
   and `utils_test.py`.
 - `live_graphd_test.py`, which starts its own graphd on a free port in a
-  temporary directory, bootstraps it, and runs MQL reads and writes against it.
+  temporary directory, bootstraps it, and runs MQL reads and writes against it;
+  and `reach_test.py`, path search (`reach`), the same way.
   It looks for the graphd binary in `--graphd_binary`, then `$GRAPHD`, then
   `../graphd/out/bin/graphd` next to this repository (the Make build), and is
   skipped if there is none.
