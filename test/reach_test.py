@@ -272,6 +272,203 @@ class ReachTest(live_graphd_test.LiveGraphdTestCase):
     with self.assertRaisesRegex(error.MQLParseError, 'only in a read'):
       self.write({'id': T + 'alice', 'reach': {'step': KNOWS}})
 
+  def testMoreErrors(self):
+    self.assertParseError({'step|=': []}, "'step\\|=' must be a list")
+    self.assertParseError({'step': 5}, 'A step must be a property')
+    self.assertParseError({'step': 'name'}, 'values are objects')
+    self.assertParseError({'step': '!!' + KNOWS}, 'not a valid property')
+    self.assertParseError({'step': {}}, 'must name a property')
+    self.assertParseError({'step': KNOWS, 'steps': 'three'},
+                          'non-negative integer')
+    self.assertParseError({'step': KNOWS, 'steps>=': True},
+                          'non-negative integer')
+    self.assertParseError({'step': KNOWS, 'path': [{'limit': 1}]},
+                          "Can't use 'limit' in the objects on a path")
+    self.assertParseError(
+        {'step': KNOWS, 'path': [{'reach': {'step': KNOWS}}]},
+        "Can't use 'reach' in the objects on a path")
+    self.assertParseError(
+        {'step': KNOWS, 'paths': [{'path': [{}], 'limit': 0}]},
+        'positive integer')
+    self.assertParseError({'step': KNOWS, 'paths': {'return': 'name'}},
+                          "'paths' must be")
+    self.assertParseError([{'step': KNOWS}, {'step': KNOWS}],
+                          "'reach' must be")
+    with self.assertRaises(error.MQLTypeError):
+      self.read({'id': T + 'alice',
+                 'reach': {'step': PERSON + '/no_such_property'}})
+
+  def testTargetPattern(self):
+    # the target is any subquery, not only an id
+    self.assertEqual(
+        self.reach('alice', [{'step': KNOWS, 'name': 'Frank', 'id': None,
+                              'steps': None}]),
+        [{'name': 'Frank', 'id': T + 'frank', 'steps': 3}])
+    self.assertEqual(
+        self.reach('alice', [{'step': KNOWS, 'name~=': 'Da*',
+                              'name': None}]),
+        [{'name': 'Dave'}])
+    self.assertEqual(
+        self.reach('alice', [{'step': KNOWS, 'type': PERSON,
+                              'knows': 'Frank', 'name': None}]),
+        [{'type': PERSON, 'knows': 'Frank', 'name': 'Dave'}])
+    self.assertIsNone(
+        self.read({'id': T + 'alice',
+                   'reach': {'step': KNOWS, 'id': T + 'nobody'}}))
+
+  def testStepsComparisons(self):
+    def names(**comparison):
+      return self.reach('alice', [dict({'step': KNOWS, 'return': 'name',
+                                        'name': None}, **comparison)])
+    self.assertEqual(names(**{'steps>=': 2}), ['Dave', 'Frank'])
+    self.assertEqual(names(**{'steps>': 2}), ['Frank'])
+    self.assertEqual(names(**{'steps<': 2}), ['Bob', 'Erin'])
+    # no match: the start doesn't match either, unless it is optional
+    self.assertIsNone(
+        self.read({'id': T + 'alice',
+                   'reach': [{'step': KNOWS, 'steps>': 3}]}))
+    self.assertEqual(names(**{'steps>': 3, 'optional': True}), [])
+
+  def testSortAndCount(self):
+    self.assertEqual(
+        self.reach('alice', [{'step': KNOWS, 'name': None,
+                              'sort': '-name', 'return': 'name'}]),
+        ['Frank', 'Erin', 'Dave', 'Bob'])
+    result = self.reach('alice', [{'step': KNOWS, 'name': None,
+                                   'count': None}])
+    self.assertEqual([r['count'] for r in result], [4, 4, 4, 4])
+
+  def testForbidden(self):
+    # those of the six who can't reach frank (testAsOfTimeBetweenWrites
+    # adds more people)
+    six = ['Alice', 'Bob', 'Carol', 'Dave', 'Erin', 'Frank']
+    result = self.read([{'type': PERSON, 'name': None, 'name|=': six,
+                         'reach': {'step': KNOWS, 'id': T + 'frank',
+                                   'optional': 'forbidden'}}])
+    self.assertEqual([r['name'] for r in result], ['Frank'])
+
+  def testAnyLinkEitherWay(self):
+    # the reflection properties follow every link: alice and frank are
+    # two steps apart through their type, their namespace and more
+    result = self.reach(
+        'alice', {'step|=': ['/type/reflect/any_master',
+                             '/type/reflect/any_reverse'],
+                  'id': T + 'frank', 'steps': None})
+    self.assertEqual(result['steps'], 2)
+    result = self.reach(
+        'alice', {'step|=': ['/type/reflect/any_master',
+                             '/type/reflect/any_reverse'],
+                  'id': T + 'carol', 'steps': None,
+                  'path': [{'id': None, 'via': None}]})
+    self.assertEqual(result['steps'], 1)
+    self.assertEqual(result['path'][1],
+                     {'id': T + 'carol',
+                      'via': {'/type/reflect/any_reverse': '*'}})
+
+  def testStepRootFields(self):
+    # fields at a step's root are those of the object the step leaves
+    result = self.reach('alice', {'step': {'name': None, KNOWS: '*'},
+                                  'id': T + 'dave',
+                                  'path': [{'via': None}]})
+    self.assertEqual(result['path'], [
+        {},
+        {'via': {'name': 'Alice', KNOWS: '*'}},
+        {'via': {'name': 'Bob', KNOWS: '*'}},
+    ])
+
+  def testConstraintInStep(self):
+    # a given value in a step constrains which steps there are
+    step = {KNOWS: [{'name': 'Bob', KNOWS: '*'}]}
+    result = self.reach('alice', {'step': step, 'id': T + 'dave',
+                                  'path': [{'via': None}]})
+    self.assertEqual(result['path'][1],
+                     {'via': {KNOWS: [{'name': 'Bob', KNOWS: '*'}]}})
+    step = {KNOWS: {'name': 'Carol', KNOWS: '*'}}
+    self.assertIsNone(
+        self.read({'id': T + 'alice',
+                   'reach': {'step': step, 'id': T + 'dave'}}))
+
+  def testOptionalSubqueryInStep(self):
+    # an optional subquery only returns values: read after the search
+    step = {KNOWS: '*', 'b:' + KNOWS: [{'name': None, 'optional': True}]}
+    query = {'id': T + 'alice',
+             'reach': {'step': step, 'id': T + 'bob',
+                       'path': [{'via': None}]}}
+    self.assertNotIn('optional',
+                     self.mql.high_querier.to_gql(None, query, {}))
+    self.assertEqual(
+        self.read(query)['reach']['path'][1]['via'],
+        {KNOWS: '*', 'b:' + KNOWS: [{'name': 'Bob'}, {'name': 'Erin'}]})
+
+  def testReachInASubquery(self):
+    # from carol's friend; "knows" is looked up on the friend's type
+    result = self.read({
+        'id': T + 'carol', 'type': PERSON,
+        'knows': {'name': None,
+                  'reach': {'step': 'knows', 'id': T + 'frank',
+                            'steps': None}}})
+    self.assertEqual(result['knows'],
+                     {'name': 'Alice',
+                      'reach': {'id': T + 'frank', 'steps': 3}})
+
+  def testPathsWithVia(self):
+    result = self.reach('alice', {
+        'step|=': [KNOWS, '!' + KNOWS], 'id': T + 'frank',
+        'paths': [{'path': [{'name': None, 'via': None}]}]})
+    self.assertEqual(result['paths'], [
+        {'path': [{'name': 'Alice'},
+                  {'name': name, 'via': {KNOWS: '*'}},
+                  {'name': 'Dave', 'via': {KNOWS: '*'}},
+                  {'name': 'Frank', 'via': {KNOWS: '*'}}]}
+        for name in ('Bob', 'Erin')
+    ])
+
+  def testPathsForManyStarts(self):
+    # one read fills the objects on every start's path
+    result = self.read([{
+        'type': PERSON, 'name': None, 'sort': 'name',
+        'reach': {'step': KNOWS, 'id': T + 'frank', 'return': 'path',
+                  'path': [{'name': None}]}}])
+    self.assertEqual(
+        dict((r['name'], [n['name'] for n in r['reach']]) for r in result),
+        {'Alice': ['Alice', 'Bob', 'Dave', 'Frank'],
+         'Bob': ['Bob', 'Dave', 'Frank'],
+         'Carol': ['Carol', 'Alice', 'Bob', 'Dave', 'Frank'],
+         'Dave': ['Dave', 'Frank'],
+         'Erin': ['Erin', 'Dave', 'Frank']})
+
+  def testReturnPath(self):
+    self.assertEqual(
+        self.reach('alice', {'step': KNOWS, 'id': T + 'dave',
+                             'path': [{'name': None}], 'return': 'path'}),
+        [{'name': 'Alice'}, {'name': 'Bob'}, {'name': 'Dave'}])
+    self.assertEqual(
+        self.reach('alice', {'step': KNOWS, 'id': T + 'frank',
+                             'paths': {'return': 'count'},
+                             'return': 'paths'}), 2)
+
+  def testAsOfTimeBetweenWrites(self):
+    # gina -> hank, then hank -> ivan: as of the first, no path to ivan
+    for name in ('gina', 'hank', 'ivan'):
+      self.write({'create': 'unless_exists', 'id': None, 'type': PERSON,
+                  'name': name.capitalize(),
+                  'key': {'namespace': '/en/test', 'value': name}})
+    self.write({'id': T + 'gina', 'type': PERSON,
+                'knows': {'connect': 'insert', 'id': T + 'hank'}})
+    first = self.read({'id': T + 'gina', 'type': PERSON,
+                       'knows': {'id': T + 'hank',
+                                 'link': {'timestamp': None}}})
+    first = first['knows']['link']['timestamp']
+    self.write({'id': T + 'hank', 'type': PERSON,
+                'knows': {'connect': 'insert', 'id': T + 'ivan'}})
+
+    query = {'id': T + 'gina',
+             'reach': {'step': KNOWS, 'id': T + 'ivan', 'steps': None}}
+    self.assertEqual(self.read(query)['reach']['steps'], 2)
+    self.assertIsNone(self.read(query, as_of_time=first))
+    query['reach']['id'] = T + 'hank'
+    self.assertEqual(self.read(query, as_of_time=first)['reach']['steps'], 1)
+
 
 if __name__ == '__main__':
   absltest.main()
