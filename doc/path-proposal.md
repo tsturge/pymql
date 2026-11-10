@@ -455,8 +455,10 @@ Stonebraker to Knuth (3 steps) takes 0.14 s that way, with or without
 `name`s in the step. With `"path": null` and names in the step, the same
 search had not finished when it hit an 8-second timeout.
 
-Returning paths quickly needs graphd's chain test
-(`route_collect()` in `graphd-read-path.c`) to skip optional
-subconstraints, which can't change what a step reaches. The walking
-copy of the step could also drop them (`walk_rewrite()`). This affects A
-just as much: its `via` reads the middle objects' fields the same way.
+graphd's branch `path-optional-steps` fixes this: its chain test
+(`route_collect()` in `graphd-read-path.c`) skips optional
+subconstraints, which can't change where a step goes, and so does its
+test for stopping at a page of the nearest matches. With it, the same
+search with names and `"path": null` takes 0.08 s cold, 0.04 s warm. A
+gains from it just as much: its `via` reads the middle objects' fields
+the same way.
