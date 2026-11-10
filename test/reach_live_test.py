@@ -236,6 +236,106 @@ class ReachTest(GraphdTestCase):
         self.reach('alice', [{'step': K, 'steps': None, 'return': 'steps'}]),
         [1, 2, 3])
 
+  def testThreeAlternatives(self):
+    # graphd nests the "or"s; each match says which alternative it took.
+    result = self.reach('bob', [{
+        'step|=': [K, '!' + K, '!' + A],
+        'id': None,
+        'steps<=': 1,
+        'path': None,
+    }])
+    self.assertEqual(sorted((r['id'], list(r['path'])) for r in result), [
+        (pid('alice'), ['!' + K]),
+        (pid('carol'), [K]),
+        (pid('one'), ['!' + A]),
+        (pid('three'), ['!' + A]),
+        (pid('two'), ['!' + A]),
+    ])
+
+  def testEitherWayPathsTree(self):
+    # Raw author links either way: alice to carol through a paper, a
+    # person and a paper, three ways; each level keyed by its direction.
+    result = self.reach('alice', {
+        'step|=': [A, '!' + A],
+        'id': pid('carol'),
+        'steps': None,
+        'paths': None,
+    })
+    carol = [{'id': pid('carol')}]
+    self.assertEqual(result, {
+        'id': pid('carol'),
+        'steps': 4,
+        'paths': {'!' + A: [
+            {'id': pid('one'), A: [{
+                'id': pid('bob'),
+                '!' + A: [{'id': pid('two'), A: carol},
+                          {'id': pid('three'), A: carol}]}]},
+            {'id': pid('five'), A: [{
+                'id': pid('erin'),
+                '!' + A: [{'id': pid('seven'), A: carol}]}]},
+        ]},
+    })
+
+  def testInnermostList(self):
+    # Written as a list, each level's next object comes back in one.
+    step = {'!' + A: {A: [{'name': None}]}}
+    result = self.reach('alice', {'step': step, 'id': pid('bob'),
+                                  'path': None})
+    self.assertEqual(result['path'], {'!' + A: {A: [{'name': 'Bob'}]}})
+
+  def testDefaultFields(self):
+    # {} as the innermost object reads the default properties, as in
+    # plain MQL.
+    step = {'!' + A: {A: {}}}
+    path = self.reach('alice', {'step': step, 'id': pid('bob'),
+                                'path': None})['path']
+    node = path['!' + A][A]
+    self.assertEqual(node['id'], pid('bob'))
+    self.assertEqual(node['name'], 'Bob')
+
+  def testConditionOnTheMiddle(self):
+    # Not through papers five, six or seven (all erin's): three steps.
+    step = {'!' + A: {
+        'name|=': ['Paper One', 'Paper Two', 'Paper Three', 'Paper Four'],
+        A: {}}}
+    self.assertEqual(
+        self.reach('alice', {'step': step, 'id': pid('dave'), 'steps': None}),
+        {'id': pid('dave'), 'steps': 3})
+
+  def testSortAndCountInAList(self):
+    bare = {'!' + A: {A: {}}}
+    result = self.reach('alice', [{
+        'step': bare, 'steps<=': 1, 'name': None, 'sort': '-name',
+        'count': None,
+    }])
+    self.assertEqual(result, [{'name': 'Erin', 'count': 2},
+                              {'name': 'Bob', 'count': 2}])
+
+  def testReachInsideAList(self):
+    # From each author of paper one, the distance to dave along knows.
+    result = self.read({
+        'id': pid('one'),
+        A: [{'name': None, 'sort': 'name',
+             'reach': {'step': K, 'id': pid('dave'), 'steps': None,
+                       'optional': True}}],
+    })
+    self.assertEqual(result[A], [
+        {'name': 'Alice', 'reach': {'id': pid('dave'), 'steps': 3}},
+        {'name': 'Bob', 'reach': {'id': pid('dave'), 'steps': 2}},
+    ])
+
+  def testPathDoesNotChangeTheMatches(self):
+    # Without a path, pymql drops the step's optional reads; with one,
+    # it keeps them. Matches and distances must be the same.
+    query = [{'step': COAUTHOR, 'name': None, 'steps': None}]
+    without = self.reach('alice', query)
+    query[0]['path'] = None
+    with_path = self.reach('alice', query)
+    self.assertEqual(without,
+                     [{k: v for k, v in r.items() if k != 'path'}
+                      for r in with_path])
+    self.assertEqual([r['steps'] for r in without], [1, 1, 2, 2])
+
   def testAsOfTime(self):
     # A link written after the fixture isn't there as of the fixture.
     before = self.read({
