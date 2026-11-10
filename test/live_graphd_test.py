@@ -50,11 +50,12 @@ def _free_port():
   return port
 
 
-class LiveGraphdTest(absltest.TestCase):
+class GraphdTestCase(absltest.TestCase):
+  """Starts a bootstrapped graphd for the class; helpers, but no tests."""
 
   @classmethod
   def setUpClass(cls):
-    super(LiveGraphdTest, cls).setUpClass()
+    super(GraphdTestCase, cls).setUpClass()
     if not os.access(FLAGS.graphd_binary, os.X_OK):
       raise unittest.SkipTest('no graphd binary at %s' % FLAGS.graphd_binary)
 
@@ -92,7 +93,7 @@ class LiveGraphdTest(absltest.TestCase):
   @classmethod
   def tearDownClass(cls):
     cls._StopGraphd()
-    super(LiveGraphdTest, cls).tearDownClass()
+    super(GraphdTestCase, cls).tearDownClass()
 
   @classmethod
   def _StopGraphd(cls):
@@ -124,6 +125,9 @@ class LiveGraphdTest(absltest.TestCase):
     }
     query.update(extra)
     return self.write(query)
+
+
+class LiveGraphdTest(GraphdTestCase):
 
   def testReadBootstrappedSchema(self):
     result = self.read({'id': '/type/object/type', 'guid': None})

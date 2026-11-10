@@ -84,6 +84,9 @@ There are three kinds of test in `test/`:
   It looks for the graphd binary in `--graphd_binary`, then `$GRAPHD`, then
   `../graphd/out/bin/graphd` next to this repository (the Make build), and is
   skipped if there is none.
+- `reach_live_test.py`, the same against the small co-author graph of
+  `path_fixture.py`, for the `reach` directive (path search; see
+  `doc/path-proposal.md`).
 - The rest replay graphd responses recorded from the Freebase graph in
   `test/data/*.yaml`, so they don't need a graphd.
 

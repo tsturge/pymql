@@ -72,6 +72,9 @@ class ReadQP(object):
     self.include_count = False
     self.include_estimate_count = False
     self.vars = {}
+    # alternatives written as graphd's {...} | {...}: a list of branches,
+    # each a list of subconstraints (see PathQP)
+    self.or_branches = []
     # icky flag to note when we optimize away self.query
     self.final = None
     if category == 'node':
@@ -205,8 +208,30 @@ class ReadQP(object):
 
     for child in self.contents:
       child.generate_graph_query(qpush)
+    self.generate_or_branches(qpush)
 
     qpush(') ')
+
+  def generate_or_branches(self, qpush):
+    # A single branch needs no braces. graphd puts each branch's results in
+    # this constraint's contents after its other subconstraints', with
+    # "null" for the branches that didn't match.
+    if len(self.or_branches) == 1:
+      for child in self.or_branches[0]:
+        child.generate_graph_query(qpush)
+      return
+    for i, branch in enumerate(self.or_branches):
+      if i:
+        qpush('| ')
+      qpush('{')
+      for child in branch:
+        child.generate_graph_query(qpush)
+      qpush('} ')
+
+  def has_contents(self):
+    # graphd's "*" returns nothing, so it doesn't count.
+    return (self.or_branches or
+            any(child.category != 'star' for child in self.contents))
 
   def generate_fields(self, qpush):
     for k in self.graphfields:
@@ -343,7 +368,7 @@ class ReadQP(object):
       qpush(k)
       qpush(' ')
 
-    if self.contents:
+    if self.has_contents():
       qpush('contents')
 
     qpush(')) ')
@@ -431,6 +456,8 @@ class ReadQP(object):
       elif qp.category == 'directlink':
         high_result[qp.query.key] = qp.parse_result_direct_link(
             result[n + i], varenv)
+      elif qp.category == 'path':
+        high_result[qp.query.key] = qp.parse_result_path(result[n + i], varenv)
       elif qp.category == 'constraint':
         # constraints are supressed
         pass
@@ -704,7 +731,10 @@ class ReadQP(object):
 
       n = len(self.result)
       for i, qp in enumerate(self.contents):
-        if qp.category == 'node':
+        if qp.category == 'star':
+          # the end of a "reach" step returns nothing (and is last).
+          continue
+        elif qp.category == 'node':
           # we are guaranteeing a single result here -- so no optional in this case.
           if len(sub_result[n + i]) != 1:
             raise MQLInternalError(self.query,
@@ -974,3 +1004,258 @@ class FinalQP(object):
     else:
       raise MQLInternalError(
           self.query, "Can't handle a final that is not also a terminal")
+
+
+class StarQP(object):
+  """The end of a "reach" step: graphd's "*", the node the step reaches.
+
+    It stands alone, so it has no fields, results or subconstraints.
+    """
+  category = 'star'
+  optional = None
+
+  def __init__(self, query):
+    self.query = query
+    self.parent = None
+    self.linkage = None
+
+  def generate_graph_query(self, qpush):
+    field, contains = self.linkage
+    qpush('%s->(*) ' % field)
+
+
+class PathQP(ReadQP):
+  """A "reach" clause: graphd's <-path constraint.
+
+    Its own fields and subconstraints come from the target clause. Beside
+    it are:
+
+      step_root   the step template (a node ReadQP): its subconstraints
+                  read each node's fields (those of the step's innermost
+                  object), and its or_branches hold the step's
+                  alternatives, one link each, leading to a StarQP;
+      chains      for each alternative, the keys from the root to its
+                  StarQP, along which the parsed step is filled in;
+      match       a node ReadQP for a second copy of the innermost object,
+                  whose constraints and subconstraints are generated as
+                  this constraint's own: the match must meet them too, and
+                  they give the match's fields at the end of a path.
+
+    and what the clause asks of graphd: steps (want_steps, steps_value,
+    steps_comparisons), path (want_path) and paths (paths: None, 'tree' or
+    'count'; pathlimit).
+    """
+
+  def __init__(self, query):
+    super(PathQP, self).__init__(query, 'node')
+    self.category = 'path'
+    self.step_root = None
+    self.chains = []
+    self.match = None
+    self.want_steps = False
+    self.steps_value = None
+    self.steps_comparisons = []
+    self.want_path = False
+    self.paths = None
+    self.pathlimit = None
+
+  def wants_via(self):
+    return self.want_path or self.paths == 'tree'
+
+  def generate_graph_query(self, qpush):
+    qpush('(<-path step=')
+    self.step_root.generate_graph_query(qpush)
+
+    if self.steps_value is not None:
+      qpush('steps=%d ' % self.steps_value)
+    for op, value in self.steps_comparisons:
+      qpush('steps%s%d ' % (op, value))
+    if self.pathlimit is not None:
+      qpush('pathlimit=%d ' % self.pathlimit)
+
+    self.generate_fields(qpush)
+    self.generate_comparisons(qpush)
+    self.match.generate_comparisons(qpush)
+    self.generate_vars(qpush)
+    self.match.generate_vars(qpush)
+    self.generate_result(qpush)
+
+    for child in self.contents + self.match.contents:
+      child.generate_graph_query(qpush)
+
+    qpush(') ')
+
+  def path_atoms(self):
+    atoms = []
+    if self.want_steps:
+      atoms.append('steps')
+    if self.want_path:
+      atoms.append('path via')
+    if self.paths == 'count':
+      atoms.append('path-count')
+    elif self.paths == 'tree':
+      atoms.append('(path via)')
+    return atoms
+
+  def generate_result(self, qpush):
+    qpush('result=(')
+
+    if self.return_count:
+      return qpush('count) ')
+    if self.return_estimate_count:
+      return qpush('estimate-count) ')
+    if self.include_count:
+      qpush('count ')
+    if self.include_estimate_count:
+      qpush('estimate-count ')
+
+    qpush('(')
+    for k in self.path_atoms() + self.result + self.match.result:
+      qpush(k)
+      qpush(' ')
+    if self.contents or self.match.contents:
+      qpush('contents')
+    qpush(')) ')
+
+  def parse_result_path(self, result, varenv):
+    outer_result = []
+    for row in result:
+      outer_result.append(self.parse_match(row, varenv))
+    return self.list_or_item(outer_result, varenv)
+
+  def parse_match(self, row, varenv):
+    i = 0
+    steps = path = via = paths = None
+    if self.want_steps:
+      steps = int(row[i])
+      i += 1
+    if self.want_path:
+      path, via = row[i], row[i + 1]
+      i += 2
+    if self.paths == 'count':
+      paths = int(row[i])
+      i += 1
+    elif self.paths == 'tree':
+      paths = row[i]
+      i += 1
+
+    # The rest is as for two nodes: the target's results, then the match's,
+    # then the target's contents, then the match's.
+    row = row[i:]
+    nr, nm = len(self.result), len(self.match.result)
+    nc = len(self.contents)
+    contents = row[nr + nm:]
+    high_result = self.parse_result_node(row[:nr] + contents[:nc], {}, varenv)
+
+    if self.steps_value is not None:
+      high_result['steps'] = self.steps_value
+    elif self.want_steps:
+      high_result['steps'] = steps
+
+    if self.wants_via():
+      match = self.match.parse_result_node(row[nr:nr + nm] + contents[nc:], {},
+                                           varenv)
+      steps_cache = {}
+      if self.want_path:
+        high_result['path'] = self.nest_path(path, via, match, steps_cache,
+                                             varenv)
+      if self.paths == 'tree':
+        high_result['paths'] = self.nest_paths(paths, match, steps_cache,
+                                               varenv)
+    elif self.paths == 'count':
+      high_result['paths'] = paths
+
+    return high_result
+
+  def parse_step(self, via_step, varenv):
+    """ Parses one step's via: the step template's reply with its root bound
+        to the step's start and "*" to its end.
+
+        Returns the start node's fields, the step's own result ({key: ...},
+        keyed by the alternative that matched, with an empty object where
+        the next node goes), and the keys leading there.
+        """
+    if len(via_step) != 1:
+      raise MQLInternalError(
+          self.query, 'Expected one reply for a step', count=len(via_step))
+    row = via_step[0]
+    root = self.step_root
+    n = len(root.result) + len(root.contents)
+    fields = root.parse_result_node(row[:n], {}, varenv)
+
+    links = row[n:]
+    for (link, keys), entry in zip(self.chains, links):
+      if entry != 'null':
+        return fields, {keys[0]: link.parse_result_link(entry, varenv)}, keys
+
+    raise MQLInternalError(self.query, 'No alternative of a step matched')
+
+  def cached_step(self, path, via, i, cache, varenv):
+    # Step i of a path, from path[i] to path[i + 1]. A step with the same
+    # ends has the same via, in whichever of a match's paths it comes up.
+    key = (path[i], path[i + 1])
+    if key not in cache:
+      cache[key] = self.parse_step(via[i], varenv)
+    return cache[key]
+
+  def nest_path(self, path, via, match, cache, varenv):
+    """ The path written out as the step repeated: each step's result, with
+        the next node's fields and the next step in place of its innermost
+        object, down to the match.
+        """
+    rest = match
+    for i in range(len(via) - 1, -1, -1):
+      fields, step, keys = self.cached_step(path, via, i, cache, varenv)
+      step = fill_step(step, keys, rest)
+      if i == 0:
+        return step
+      # node i's fields, from the step leaving it
+      rest = dict(fields)
+      rest.update(step)
+    return None
+
+  def nest_paths(self, paths, match, cache, varenv):
+    """ A match's shortest paths as a tree: paths that begin alike share a
+        branch, and every step's key holds a list. Each level is in order of
+        the guid of the node the step reaches.
+        """
+    paths = [(path, via) for path, via in paths]
+
+    def subtree(group, i):
+      by_next = {}
+      for path, via in group:
+        by_next.setdefault(path[i + 1], []).append((path, via))
+      out = {}
+      for node in sorted(by_next):
+        group = by_next[node]
+        path, via = group[0]
+        fields, step, keys = self.cached_step(path, via, i, cache, varenv)
+        if i + 1 == len(via):
+          rest = match
+        else:
+          rest = dict(self.cached_step(path, via, i + 1, cache, varenv)[0])
+          rest.update(subtree(group, i + 1))
+        value = fill_step(step, keys, rest)[keys[0]]
+        out.setdefault(keys[0], []).extend(
+            value if isinstance(value, list) else [value])
+      return out
+
+    if not paths:
+      return {}
+    return subtree(paths, 0)
+
+
+def fill_step(value, keys, rest):
+  """ Puts rest where the step's innermost object is: at the end of keys,
+      through every element of each list along the way. The copies of rest
+      are shared; the result is copied when ids are substituted.
+      """
+  if isinstance(value, list):
+    return [fill_step(v, keys, rest) for v in value]
+  if not keys:
+    return rest
+  if value is None:
+    return None
+  value = dict(value)
+  value[keys[0]] = fill_step(value[keys[0]], keys[1:], rest)
+  return value

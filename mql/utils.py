@@ -63,6 +63,9 @@ class QueryDict(OrderedDict):
   sort_var = None  # hijson-only - sorts on this node
   sort = None  #
   alternatives = None  # hijson-only - list of value alternatives for |= operator
+  reach = None  # hijson-only - a "reach" clause: its step, steps, path, paths
+  step_end = False  # hijson-only - the end of a "reach" step: graphd's "*"
+  allow_empty = False  # hijson-only - may have no properties ("reach" clauses)
 
   disconnected = False  # lojson-only - no matching query clause
 

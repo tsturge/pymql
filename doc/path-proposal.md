@@ -1,10 +1,11 @@
 # Path search in MQL: a proposal
 
-Status: a proposal, not implemented. It builds on graphd's `<-path`
-constraint (graphd's `doc/path-proposal.md`), which is implemented: MQL
-would compile to it, and graphd needs nothing new. All searching and
-filtering happens in graphd; pymql only writes the query and shapes
-the reply.
+Status: a proposal. Alternative B is implemented on the `reach-b` branch
+(see [B as implemented](#b-as-implemented), at the end). It builds on
+graphd's `<-path` constraint (graphd's `doc/path-proposal.md`), which is
+implemented: MQL compiles to it, and graphd needs nothing new to answer
+correctly (but see [Speed](#speed)). All searching and filtering happens
+in graphd; pymql only writes the query and shapes the reply.
 
 There are two alternatives. They share the directive, the targets and
 the rules (below), and differ in how a step names the next object and
@@ -382,3 +383,80 @@ read (guid=<stonebraker> result=((contents))
    `type` today. Putting the target in a key of its own (`"to": {...}`)
    would avoid that, at the cost of nesting and of moving the
    one-or-many choice onto `to`.
+
+## B as implemented
+
+On the `reach-b` branch: `mql/hijson.py` (`resolve_reach()`,
+`add_query_primitive_reach()`) and `mql/readqp.py` (`PathQP`), tested
+by `test/reach_live_test.py` on the small graph of
+`test/path_fixture.py`. Everything above for B works as written; where
+the proposal left a choice open, the implementation takes these:
+
+- **A simple step** `"P"` is `{"P": {"id": null}}`: each level of a
+  path gives the node's id, and the next step beside it.
+- **The step's outermost object** holds only the property it starts
+  with. That property is resolved on `/type/object`, so it is written as
+  a full id (or a `/type/object` or reflection property).
+- **Finding the chain.** The step is resolved as plain MQL first. The
+  next object at each level is the one object subquery written as `{...}`
+  or `[{...}]` (`{}` counts, and means the default properties, as in
+  plain MQL); values, and objects read as values (`"venue": null`), don't
+  count. `"type": {...}` would count, so write `"type": "/t"`.
+- **Directives.** None in the innermost object (it is a node, not a
+  result list); in a middle object, `limit` and `sort` but not
+  `optional`, `return` or `count` (every step is taken). No `id` with a
+  value in the innermost object, since it would hold for every node.
+- **`step|=`**: each alternative is one branch of a graphd "or" (one
+  alternative needs no "or"), and all must end in the same innermost
+  object, since it is compiled once, on the step's root.
+- **`{...}` in the middle** is the first way through the step (graphd's
+  `pagesize=1` on that link, which the walk ignores).
+- **`"steps": 3`** is echoed in the result, as MQL echoes constraints.
+- **`paths`**: `null` (up to 100 paths, MQL's default limit),
+  `{"limit": n}`, or `{"return": "count"}`. Each level of the tree is in
+  order of the guid of the node its steps reach. `path` and `paths` can
+  be asked for together.
+- **`return`** can name a reach clause's `steps`, `path` and `paths`, as
+  well as its target's keys: `"return": "steps"`, or
+  `"return": ["name", "reach.steps"]` from outside.
+
+### The query
+
+For a step `{"!author": [{"name": null, "author": {"name": null}}]}`,
+pymql writes:
+
+- the step's root: the innermost object's keys (`name` on each node),
+  then the chain to `*`, `right->(*)` or `left->(*)` by direction, in a
+  branch of its own;
+- on the `<-path` constraint: the target's keys, then a second copy of
+  the innermost object's keys (so the match meets its conditions, and
+  returns its fields at the end of the path);
+- `result=((steps path via ...))`, or `(path via)` in a list for
+  `paths`, with `pathlimit`.
+
+Each element of `via` is graphd's reply to the step template, so pymql
+parses it with the same code as any reply (`parse_result_node()` on the
+step's root), takes the alternative whose entry isn't `null`, and
+nests: the next node's fields and step go where the step's `*` was.
+Steps with the same two ends are parsed once.
+
+### Speed
+
+graphd's fast walks (the chain walk, and searching from both ends) need
+each constraint in the step to have exactly one subconstraint, the next
+link. In MQL, reading a field such as `name` is an optional
+subconstraint (a link to the name), so a step that returns fields isn't
+a chain, and graphd falls back to its general walk, from one end.
+
+So when the clause asks for neither `path` nor `paths`, nothing reads
+what the step returns, and pymql drops the optional subconstraints from
+the step (and from the match's copy of the innermost object). On dblp,
+Stonebraker to Knuth (3 steps) takes 0.14 s that way, with or without
+`name`s in the step. With `"path": null` and names in the step, the same
+search had not finished when it hit an 8-second timeout.
+
+Returning paths quickly needs graphd's chain test
+(`route_collect()` in `graphd-read-path.c`) to skip optional
+subconstraints, which can't change what a step reaches. The walking
+copy of the step could also drop them (`walk_rewrite()`). This affects A
+just as much: its `via` reads the middle objects' fields the same way.

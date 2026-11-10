@@ -12,7 +12,7 @@ service and doesn't import as it stands.
 | `mqlbin.py` | A command line around `MQLService` |
 | `mql/env.py` | `Varenv`, the per-request environment (`$user`, `$permission` defaulting to `/boot/all_permission`, `$lang`...); `LookupManager` and the deferred id and guid placeholders |
 | `mql/hijson.py` | `HighQuery`: MQL itself. Parsing into clauses, resolving types and properties, directives, comparisons, sort and `return`; for reads, building `ReadQP` trees and the result; for writes, lowering to low JSON and building the result |
-| `mql/readqp.py` | `ReadQP` and `FinalQP`: one graphd constraint each, for reads; generate graphd text and parse replies into MQL results |
+| `mql/readqp.py` | `ReadQP` and `FinalQP`: one graphd constraint each, for reads; generate graphd text and parse replies into MQL results. `PathQP` and `StarQP`: a `reach` clause's `<-path` constraint and its step's `*`, and nesting paths from `via` (see [path search](path-proposal.md)) |
 | `mql/lojson.py` | `LowQuery`: low JSON, the graph-shaped query language under MQL. Reads, and the whole write pipeline: implied writes, primitives, prepares, access checks, the writes, results |
 | `mql/qprim.py` | `QueryPrimitive`: one node or link of a low-JSON query or write; its states, its prepare read, its graphd write and `unique=` clause |
 | `mql/scope.py` | Permissions: `check_write_defaults()`, `check_permission()`, `Permission`, and the `Privileged` and `Authority` sentinels |
@@ -49,7 +49,8 @@ service and doesn't import as it stands.
 - **Unit tests**, no graphd: `grparse_test.py`, `grquoting_test.py`,
   `keyquote_test.py`, `mid_codec_test.py`, `utils_test.py`.
 - **`live_graphd_test.py`**: starts a graphd, bootstraps it, reads
-  and writes.
+  and writes. `reach_live_test.py` does the same on the co-author graph
+  of `path_fixture.py`, for `reach`.
 - **The rest**: MQL queries with expected results, whose graphd traffic
   is replayed from `test/data/*.yaml` (recorded from Freebase), through
   `mql_fixture.py` and `conn_mock.py`. A replayed request must match a
